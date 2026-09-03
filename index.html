@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Human Typing Simulator - Bookmarklet</title>
+    <style>
+        :root {
+            --bg: #0f0f13;
+            --card: #1a1a24;
+            --card-border: #2e2e42;
+            --text: #e4e4f0;
+            --text-muted: #9a9ab0;
+            --accent: #6c5ce7;
+            --accent-hover: #7d6ff0;
+            --danger: #e74c3c;
+            --success: #2ecc71;
+            --radius: 12px;
+            --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font);
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 720px;
+            width: 100%;
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #6c5ce7, #a29bfe, #fd79a8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .subtitle {
+            color: var(--text-muted);
+            margin-bottom: 2rem;
+            font-size: 1.05rem;
+        }
+
+        .card {
+            background: var(--card);
+            border: 1px solid var(--card-border);
+            border-radius: var(--radius);
+            padding: 28px;
+            margin-bottom: 24px;
+            transition: border-color 0.2s;
+        }
+
+        .card:hover {
+            border-color: #3d3d5c;
+        }
+
+        .card h2 {
+            font-size: 1.25rem;
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card h2 .icon {
+            font-size: 1.4rem;
+        }
+
+        .bookmarklet-box {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .bookmarklet-link {
+            display: inline-block;
+            background: var(--accent);
+            color: #fff;
+            padding: 14px 28px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.05rem;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            user-select: all;
+            word-break: break-all;
+            line-height: 1.4;
+            box-shadow: 0 4px 16px rgba(108, 92, 231, 0.3);
+        }
+
+        .bookmarklet-link:hover {
+            background: var(--accent-hover);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 24px rgba(108, 92, 231, 0.45);
+        }
+
+        .bookmarklet-link:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(108, 92, 231, 0.3);
+        }
+
+        .bookmarklet-link.drag-hint {
+            cursor: grab;
+            user-select: none;
+            background: #2e2e42;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+        }
+
+        .bookmarklet-link.drag-hint:hover {
+            background: #3d3d5c;
+            transform: none;
+        }
+
+        .instructions {
+            color: var(--text-muted);
+            font-size: 0.92rem;
+            padding-left: 8px;
+            border-left: 3px solid var(--accent);
+        }
+
+        .instructions ol {
+            padding-left: 20px;
+            margin: 6px 0 0;
+        }
+
+        .instructions li {
+            margin-bottom: 6px;
+        }
+
+        .instructions code {
+            background: #2a2a3e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: #a29bfe;
+        }
+
+        .demo-area {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .demo-area label {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        .demo-area input[type="text"],
+        .demo-area textarea {
+            background: #12121c;
+            border: 1px solid #2e2e42;
+            border-radius: 8px;
+            padding: 12px 16px;
+            color: var(--text);
+            font-size: 1rem;
+            font-family: var(--font);
+            outline: none;
+            transition: border-color 0.2s;
+            resize: vertical;
+            min-height: 44px;
+        }
+
+        .demo-area input[type="text"]:focus,
+        .demo-area textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.15);
+        }
+
+        .demo-area textarea {
+            min-height: 120px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: var(--font);
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-secondary {
+            background: #2a2a3e;
+            color: var(--text);
+            border: 1px solid #3d3d5c;
+        }
+
+        .btn-secondary:hover {
+            background: #333350;
+        }
+
+        .source-code {
+            background: #0a0a12;
+            border-radius: 8px;
+            padding: 20px;
+            overflow-x: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.7;
+            color: #c5c5e8;
+            white-space: pre-wrap;
+            word-break: break-all;
+            max-height: 500px;
+            overflow-y: auto;
+            border: 1px solid #1e1e32;
+        }
+
+        .source-code::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .source-code::-webkit-scrollbar-track {
+            background: #0a0a12;
+        }
+
+        .source-code::-webkit-scrollbar-thumb {
+            background: #3d3d5c;
+            border-radius: 4px;
+        }
+
+        .source-code::-webkit-scrollbar-thumb:hover {
+            background: #4d4d70;
+        }
+
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .feature-tag {
+            background: #1e1e32;
+            border: 1px solid #2e2e42;
+            border-radius: 6px;
+            padding: 10px 14px;
+            font-size: 0.88rem;
+            color: #c5c5e8;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .feature-tag .check {
+            color: var(--success);
+            font-weight: bold;
+        }
+
+        .copy-btn {
+            background: #2a2a3e;
+            color: var(--text);
+            border: 1px solid #3d3d5c;
+            padding: 8px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            font-family: var(--font);
+            margin-top: 12px;
+        }
+
+        .copy-btn:hover {
+            background: #333350;
+            border-color: #4d4d70;
+        }
+
+        .copy-btn.copied {
+            background: #1a3a2a;
+            border-color: #2ecc71;
+            color: #2ecc71;
+        }
+
+        @media (max-width: 600px) {
+            .card {
+                padding: 18px;
+            }
+            h1 {
+                font-size: 1.5rem;
+            }
+            .bookmarklet-link {
+                font-size: 0.9rem;
+                padding: 12px 18px;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>⌨️ Human Typing Simulator</h1>
+        <p class="subtitle">A bookmarklet that types out text character-by-character at a natural, random pace — perfect for demos, testing, or fun.</p>
+
+        <!-- Bookmarklet Card -->
+        <div class="card">
+            <h2><span class="icon">🔖</span> The Bookmarklet</h2>
+            <div class="bookmarklet-box">
+                <p style="color: var(--text-muted); font-size: 0.92rem;">
+                    <strong>Drag this to your bookmarks bar</strong> (or right-click → "Add to bookmarks"):
+                </p>
+                <!-- The actual bookmarklet link — drag this to bookmarks bar -->
+                <a href="javascript:(function(){try{var t=document.activeElement;var valid=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable);var existing=document.getElementById('__at_overlay');if(existing)existing.remove();var ov=document.createElement('div');ov.id='__at_overlay';ov.style.cssText='position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2147483647;background:#1a1a24;padding:24px;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.6);font-family:system-ui,sans-serif;min-width:380px;max-width:90vw;border:1px solid #2e2e42;color:#e4e4f0;';ov.innerHTML='<div style="font-size:16px;font-weight:700;margin-bottom:12px;">Human Typing Simulator</div><textarea id="__at_ta" style="width:100%;height:140px;padding:12px;border:1px solid #3d3d5c;border-radius:8px;font-size:14px;resize:vertical;background:#12121c;color:#e4e4f0;outline:none;font-family:inherit;box-sizing:border-box;" placeholder="Paste your text here..."></textarea><div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;"><select id="__at_speed" style="padding:8px 12px;border:1px solid #3d3d5c;border-radius:6px;background:#12121c;color:#e4e4f0;font-size:13px;cursor:pointer;outline:none;flex:1;min-width:100px;"><option value="1">🐢 Slow</option><option value="0.6" selected>🚶 Normal</option><option value="0.35">🏃 Fast</option><option value="0.15">⚡ Turbo</option></select><button id="__at_start" style="padding:10px 20px;background:#6c5ce7;color:#fff;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">Start Typing</button><button id="__at_cancel" style="padding:10px 16px;background:#2a2a3e;color:#e4e4f0;border:1px solid #3d3d5c;border-radius:6px;cursor:pointer;font-size:13px;">✕</button></div><p style="margin-top:10px;font-size:11px;color:#9a9ab0;">Ctrl+Enter to start · Esc to cancel · Click page to stop typing</p>';document.body.appendChild(ov);var ta=ov.querySelector('#__at_ta');ta.focus();ta.addEventListener('keydown',function(e){if(e.key==='Escape'){ov.remove();}if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){ov.querySelector('#__at_start').click();}});ov.querySelector('#__at_cancel').addEventListener('click',function(){ov.remove();});ov.addEventListener('click',function(e){e.stopPropagation();});ov.querySelector('#__at_start').addEventListener('click',function(){var text=ta.value;if(!text.trim()){ta.style.borderColor='#e74c3c';ta.placeholder='⚠️ Please paste some text first!';ta.focus();return;}ov.remove();var speedMul=parseFloat(ov.querySelector('#__at_speed').value)||0.6;var target=valid?t:null;if(!target){target=document.activeElement;if(!(target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable))){var cd=document.createElement('div');cd.style.cssText='position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:2147483647;background:#e74c3c;color:#fff;padding:14px 24px;border-radius:10px;font-family:system-ui,sans-serif;font-size:15px;font-weight:600;box-shadow:0 4px 20px rgba(231,76,60,.4);';cd.textContent='⚠️ Click on the target text field within 3 seconds...';document.body.appendChild(cd);var secs=3;var iv=setInterval(function(){secs--;if(secs<=0){clearInterval(iv);cd.remove();target=document.activeElement;if(!(target&&(target.tagName==='INPUT'||target.tagName==='TEXTAREA'||target.isContentEditable))){alert('No valid text field focused. Try again!');return;}beginTyping(text,target,speedMul);}else{cd.textContent='⚠️ Click on the target text field within '+secs+' seconds...';}},1000);return;}}beginTyping(text,target,speedMul);});function beginTyping(text,target,speedMul){try{target.focus();}catch(e){}var i=0;var stopped=false;var stopHandler=function(e){if(e.target!==target){stopped=true;document.removeEventListener('click',stopHandler);document.removeEventListener('keydown',escHandler);}};var escHandler=function(e){if(e.key==='Escape'){stopped=true;document.removeEventListener('click',stopHandler);document.removeEventListener('keydown',escHandler);}};document.addEventListener('click',stopHandler);document.addEventListener('keydown',escHandler);function getDelay(){var r=Math.random();var base;if(r<0.6)base=30+Math.random()*50;else if(r<0.85)base=80+Math.random()*100;else if(r<0.97)base=180+Math.random()*170;else base=350+Math.random()*250;return Math.round(base*speedMul);}function typeNext(){if(stopped||i>=text.length)return;var char=text[i];var inserted=false;try{if(target.isContentEditable){document.execCommand('insertText',false,char);inserted=true;}else if(target.tagName==='TEXTAREA'||target.tagName==='INPUT'){var nativeSetter=Object.getOwnPropertyDescriptor(target.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype,'value').set;var start=target.selectionStart!==undefined?target.selectionStart:target.value.length;var end=target.selectionEnd!==undefined?target.selectionEnd:target.value.length;nativeSetter.call(target,target.value.substring(0,start)+char+target.value.substring(end));var newPos=start+1;try{target.setSelectionRange(newPos,newPos);}catch(e){}target.dispatchEvent(new Event('input',{bubbles:true}));target.dispatchEvent(new Event('change',{bubbles:true}));inserted=true;}}catch(e){inserted=false;}if(!inserted){try{document.execCommand('insertText',false,char);}catch(e2){}}i++;var delay=getDelay();setTimeout(typeNext,delay);}typeNext();}})catch(err){alert('Error: '+err.message);}})();"
+                   class="bookmarklet-link"
+                   id="bookmarkletLink"
+                   title="Drag this to your bookmarks bar"
+                   onclick="return false;">
+                    🔖 Human Typing Simulator
+                </a>
+                <button class="copy-btn" id="copyBookmarklet" onclick="copyBookmarkletCode()">
+                    📋 Copy Bookmarklet Code
+                </button>
+                <div class="instructions">
+                    <strong>📌 How to use:</strong>
+                    <ol>
+                        <li>Drag the link above to your <strong>bookmarks bar</strong></li>
+                        <li>Click on any text field on any webpage</li>
+                        <li>Click the bookmark → a popup appears</li>
+                        <li>Paste your text, pick a speed, hit <code>Start Typing</code></li>
+                        <li>Watch it type! Click anywhere to stop.</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+
+        <!-- Test Area Card -->
+        <div class="card">
+            <h2><span class="icon">🧪</span> Test It Here</h2>
+            <div class="demo-area">
+                <div>
+                    <label for="test-input">Single-line input:</label>
+                    <input type="text" id="test-input" placeholder="Click here first, then click the bookmarklet..." autocomplete="off">
+                </div>
+                <div>
+                    <label for="test-textarea">Textarea:</label>
+                    <textarea id="test-textarea" placeholder="Or use this textarea as the target..." rows="3"></textarea>
+                </div>
+                <p style="color: var(--text-muted); font-size: 0.85rem;">
+                    💡 <strong>Pro tip:</strong> Click into an input above, then click the bookmarklet. Paste your text and hit Start. The text will type into the field you clicked!
+                </p>
+            </div>
+        </div>
+
+        <!-- Features Card -->
+        <div class="card">
+            <h2><span class="icon">✨</span> Features</h2>
+            <div class="feature-grid">
+                <div class="feature-tag"><span class="check">✓</span> Random typing delays</div>
+                <div class="feature-tag"><span class="check">✓</span> Human-like pacing (bursts &amp; pauses)</div>
+                <div class="feature-tag"><span class="check">✓</span> 4 speed presets</div>
+                <div class="feature-tag"><span class="check">✓</span> Works on inputs &amp; textareas</div>
+                <div class="feature-tag"><span class="check">✓</span> Works on contenteditable</div>
+                <div class="feature-tag"><span class="check">✓</span> Click anywhere to stop</div>
+                <div class="feature-tag"><span class="check">✓</span> Esc to cancel</div>
+                <div class="feature-tag"><span class="check">✓</span> Ctrl+Enter to start</div>
+                <div class="feature-tag"><span class="check">✓</span> React-compatible</div>
+                <div class="feature-tag"><span class="check">✓</span> No dependencies</div>
+                <div class="feature-tag"><span class="check">✓</span> Works on any website</div>
+                <div class="feature-tag"><span class="check">✓</span> Multi-line support</div>
+            </div>
+        </div>
+
+        <!-- Source Code Card -->
+        <div class="card">
+            <h2><span class="icon">📄</span> Source Code (Readable)</h2>
+            <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 12px;">
+                Here's the unminified version for learning or customization:
+            </p>
+            <div class="source-code" id="sourceCode">// Human Typing Simulator - Bookmarklet
+                // (Readable source code)
+                (function() {
+                try {
+                // Save the currently focused element (the typing target)
+                const targetElement = document.activeElement;
+                const isValidTarget = targetElement &&
+                (targetElement.tagName === 'INPUT' ||
+                targetElement.tagName === 'TEXTAREA' ||
+                targetElement.isContentEditable);
+
+                // Remove any existing overlay
+                const existing = document.getElementById('__at_overlay');
+                if (existing) existing.remove();
+
+                // Create the overlay
+                const overlay = document.createElement('div');
+                overlay.id = '__at_overlay';
+                overlay.style.cssText =
+                'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2147483647;' +
+                'background:#1a1a24;padding:24px;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.6);' +
+                'font-family:system-ui,sans-serif;min-width:380px;max-width:90vw;border:1px solid #2e2e42;color:#e4e4f0;';
+
+                overlay.innerHTML =
+                '<div style="font-size:16px;font-weight:700;margin-bottom:12px;">Human Typing Simulator</div>' +
+                '<textarea id="__at_ta" style="width:100%;height:140px;padding:12px;border:1px solid #3d3d5c;' +
+                'border-radius:8px;font-size:14px;resize:vertical;background:#12121c;color:#e4e4f0;outline:none;' +
+                'font-family:inherit;box-sizing:border-box;" placeholder="Paste your text here..."></textarea>' +
+                '<div style="margin-top:14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">' +
+                '<select id="__at_speed" style="padding:8px 12px;border:1px solid #3d3d5c;border-radius:6px;' +
+                'background:#12121c;color:#e4e4f0;font-size:13px;cursor:pointer;outline:none;flex:1;min-width:100px;">' +
+                '<option value="1">🐢 Slow</option>' +
+                '<option value="0.6" selected>🚶 Normal</option>' +
+                '<option value="0.35">🏃 Fast</option>' +
+                '<option value="0.15">⚡ Turbo</option>' +
+                '</select>' +
+                '<button id="__at_start" style="padding:10px 20px;background:#6c5ce7;color:#fff;border:none;' +
+                'border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;">Start Typing</button>' +
+                '<button id="__at_cancel" style="padding:10px 16px;background:#2a2a3e;color:#e4e4f0;' +
+                'border:1px solid #3d3d5c;border-radius:6px;cursor:pointer;font-size:13px;">✕</button>' +
+                '</div>' +
+                '<p style="margin-top:10px;font-size:11px;color:#9a9ab0;">' +
+                'Ctrl+Enter to start · Esc to cancel · Click page to stop typing</p>';
+
+                document.body.appendChild(overlay);
+
+                // Focus the textarea
+                const ta = overlay.querySelector('#__at_ta');
+                ta.focus();
+
+                // Keyboard shortcuts for the textarea
+                ta.addEventListener('keydown', function(e) {
+                if (e.key === 'Escape') {
+                overlay.remove();
+                }
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                overlay.querySelector('#__at_start').click();
+                }
+                });
+
+                // Cancel button
+                overlay.querySelector('#__at_cancel').addEventListener('click', function() {
+                overlay.remove();
+                });
+
+                // Prevent page click from closing overlay accidentally
+                overlay.addEventListener('click', function(e) {
+                e.stopPropagation();
+                });
+
+                // Start button
+                overlay.querySelector('#__at_start').addEventListener('click', function() {
+                const text = ta.value;
+                if (!text.trim()) {
+                ta.style.borderColor = '#e74c3c';
+                ta.placeholder = '⚠️ Please paste some text first!';
+                ta.focus();
+                return;
+                }
+                overlay.remove();
+                const speedMul = parseFloat(overlay.querySelector('#__at_speed').value) || 0.6;
+
+                // Determine the target
+                let target = isValidTarget ? targetElement : null;
+
+                if (!target) {
+                target = document.activeElement;
+                if (!(target && (target.tagName === 'INPUT' ||
+                    target.tagName === 'TEXTAREA' ||
+                    target.isContentEditable))) {
+                // Show countdown for user to focus
+                const cd = document.createElement('div');
+                cd.style.cssText =
+                'position:fixed;top:20px;left:50%;transform:translateX(-50%);z-index:2147483647;' +
+                'background:#e74c3c;color:#fff;padding:14px 24px;border-radius:10px;' +
+                'font-family:system-ui,sans-serif;font-size:15px;font-weight:600;' +
+                'box-shadow:0 4px 20px rgba(231,76,60,.4);';
+                cd.textContent = '⚠️ Click on the target text field within 3 seconds...';
+                document.body.appendChild(cd);
+
+                let secs = 3;
+                const iv = setInterval(function() {
+                secs--;
+                if (secs <= 0) {
+                clearInterval(iv);
+                cd.remove();
+                target = document.activeElement;
+                if (!(target && (target.tagName === 'INPUT' ||
+                    target.tagName === 'TEXTAREA' ||
+                    target.isContentEditable))) {
+                alert('No valid text field focused. Try again!');
+                return;
+                }
+                beginTyping(text, target, speedMul);
+                } else {
+                cd.textContent = '⚠️ Click on the target text field within ' + secs + ' seconds...';
+                }
+                }, 1000);
+                return;
+                }
+                }
+
+                beginTyping(text, target, speedMul);
+                });
+
+                // The typing function
+                function beginTyping(text, target, speedMul) {
+                try { target.focus(); } catch(e) {}
+
+                let i = 0;
+                let stopped = false;
+
+                const stopHandler = function(e) {
+                if (e.target !== target) {
+                stopped = true;
+                document.removeEventListener('click', stopHandler);
+                document.removeEventListener('keydown', escHandler);
+                }
+                };
+                const escHandler = function(e) {
+                if (e.key === 'Escape') {
+                stopped = true;
+                document.removeEventListener('click', stopHandler);
+                document.removeEventListener('keydown', escHandler);
+                }
+                };
+
+                document.addEventListener('click', stopHandler);
+                document.addEventListener('keydown', escHandler);
+
+                function getDelay() {
+                const r = Math.random();
+                let base;
+                if (r < 0.6) base = 30 + Math.random() * 50; // fast burst
+                else if (r < 0.85) base = 80 + Math.random() * 100; // normal
+                else if (r < 0.97) base = 180 + Math.random() * 170; // slow
+                else base = 350 + Math.random() * 250; // thinking pause
+                return Math.round(base * speedMul);
+                }
+
+                function typeNext() {
+                if (stopped || i >= text.length) return;
+                const char = text[i];
+                let inserted = false;
+
+                try {
+                if (target.isContentEditable) {
+                document.execCommand('insertText', false, char);
+                inserted = true;
+                } else if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
+                const proto = target.tagName === 'TEXTAREA' ?
+                window.HTMLTextAreaElement.prototype :
+                window.HTMLInputElement.prototype;
+                const nativeSetter = Object.getOwnPropertyDescriptor(proto, 'value').set;
+                const start = target.selectionStart !== undefined ? target.selectionStart : target.value.length;
+                const end = target.selectionEnd !== undefined ? target.selectionEnd : target.value.length;
+                nativeSetter.call(target,
+                target.value.substring(0, start) + char + target.value.substring(end));
+                const newPos = start + 1;
+                try { target.setSelectionRange(newPos, newPos); } catch(e) {}
+                target.dispatchEvent(new Event('input', { bubbles: true }));
+                target.dispatchEvent(new Event('change', { bubbles: true }));
+                inserted = true;
+                }
+                } catch(e) {
+                inserted = false;
+                }
+
+                if (!inserted) {
+                try { document.execCommand('insertText', false, char); } catch(e2) {}
+                }
+
+                i++;
+                const delay = getDelay();
+                setTimeout(typeNext, delay);
+                }
+
+                typeNext();
+                }
+
+                } catch(err) {
+                alert('Error: ' + err.message);
+                }
+                })();</div>
+                <button class="copy-btn" id="copySource" onclick="copySourceCode()">📋 Copy Source Code</button>
+            </div>
+
+            <!-- How It Works Card -->
+            <div class="card">
+                <h2><span class="icon">🔧</span> How It Works</h2>
+                <div style="color: var(--text-muted); font-size: 0.92rem; display: flex; flex-direction: column; gap: 10px;">
+                    <p>
+                        The bookmarklet uses a <strong>smart insertion engine</strong> that mimics real keyboard input:
+                    </p>
+                    <ul style="padding-left: 20px; display: flex; flex-direction: column; gap: 6px;">
+                        <li><strong>Native value setter</strong> — bypasses React/Vue's controlled input tracking, so it works on modern frameworks.</li>
+                        <li><strong>Input &amp; Change events</strong> — fires real DOM events so the page believes a human is typing.</li>
+                        <li><strong>Human-like delays</strong> — 60% fast bursts, 25% normal pace, 10% slow, 5% thinking pauses.</li>
+                        <li><strong>Contenteditable support</strong> — works with rich text editors (Notion, Google Docs, etc.) using <code>execCommand</code>.</li>
+                        <li><strong>Click-to-stop</strong> — a global listener halts typing instantly if you click anywhere outside the target.</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            // Copy the bookmarklet JavaScript code
+            function copyBookmarkletCode() {
+                const link = document.getElementById('bookmarkletLink');
+                const href = link.getAttribute('href');
+                navigator.clipboard.writeText(href).then(() => {
+                    const btn = document.getElementById('copyBookmarklet');
+                    btn.textContent = '✅ Copied to clipboard!';
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.textContent = '📋 Copy Bookmarklet Code';
+                        btn.classList.remove('copied');
+                    }, 2000);
+                }).catch(() => {
+                    // Fallback
+                    const textArea = document.createElement('textarea');
+                    textArea.value = href;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    textArea.remove();
+                    const btn = document.getElementById('copyBookmarklet');
+                    btn.textContent = '✅ Copied!';
+                    setTimeout(() => {
+                        btn.textContent = '📋 Copy Bookmarklet Code';
+                    }, 1500);
+                });
+            }
+
+            // Copy the readable source code
+            function copySourceCode() {
+                const code = document.getElementById('sourceCode').textContent;
+                navigator.clipboard.writeText(code).then(() => {
+                    const btn = document.getElementById('copySource');
+                    btn.textContent = '✅ Copied to clipboard!';
+                    btn.classList.add('copied');
+                    setTimeout(() => {
+                        btn.textContent = '📋 Copy Source Code';
+                        btn.classList.remove('copied');
+                    }, 2000);
+                }).catch(() => {
+                    const textArea = document.createElement('textarea');
+                    textArea.value = code;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    textArea.remove();
+                    const btn = document.getElementById('copySource');
+                    btn.textContent = '✅ Copied!';
+                    setTimeout(() => {
+                        btn.textContent = '📋 Copy Source Code';
+                    }, 1500);
+                });
+            }
+
+            // Keyboard shortcut for copy buttons
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'c') {
+                    // Don't interfere with normal copy
+                }
+            });
+        </script>
+
+    </body>
+    </html>
