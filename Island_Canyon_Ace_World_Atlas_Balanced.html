@@ -1,0 +1,3553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Island Canyon Ace — World Atlas</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&family=JetBrains+Mono:wght@600;800&display=swap');
+
+  :root {
+    --glass-bg: rgba(11, 17, 32, 0.62);
+    --glass-border: rgba(255, 255, 255, 0.16);
+    --accent-cyan: #00f5ff;
+    --accent-gold: #fbbf24;
+    --accent-crimson: #ff2a55;
+    --accent-emerald: #10b981;
+    --text-main: #f8fafc;
+    --text-dim: #94a3b8;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #060b19;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    color: var(--text-main);
+  }
+
+  #game-canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    z-index: 1;
+  }
+
+  /* Nose-cam subtle cockpit canopy frame */
+  #cockpit-frame {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    display: none;
+    border: 3px solid rgba(0, 245, 255, 0.18);
+    box-shadow: inset 0 0 80px rgba(0, 0, 0, 0.55);
+  }
+
+  #cockpit-frame::before, #cockpit-frame::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: linear-gradient(to bottom, rgba(0, 245, 255, 0.25), rgba(15, 23, 42, 0.55));
+  }
+
+  #cockpit-frame::before {
+    left: 16%;
+    transform: rotate(10deg);
+  }
+
+  #cockpit-frame::after {
+    right: 16%;
+    transform: rotate(-10deg);
+  }
+
+  /* 2D Tactical Overlay Layer */
+  #tactical-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 4;
+    overflow: hidden;
+  }
+
+  /* Center Gun Reticle */
+  #gun-reticle {
+    position: absolute;
+    left: 50%;
+    top: 47%;
+    width: 54px;
+    height: 54px;
+    transform: translate(-50%, -50%);
+    border: 2px solid rgba(0, 245, 255, 0.65);
+    border-radius: 50%;
+    box-shadow: 0 0 14px rgba(0, 245, 255, 0.28);
+    transition: border-color 0.12s, transform 0.12s, box-shadow 0.12s;
+  }
+
+  #gun-reticle::before, #gun-reticle::after {
+    content: '';
+    position: absolute;
+    background: rgba(0, 245, 255, 0.85);
+  }
+
+  #gun-reticle::before {
+    left: 50%;
+    top: -7px;
+    bottom: -7px;
+    width: 2px;
+    transform: translateX(-50%);
+  }
+
+  #gun-reticle::after {
+    top: 50%;
+    left: -7px;
+    right: -7px;
+    height: 2px;
+    transform: translateY(-50%);
+  }
+
+  #gun-reticle.locked {
+    border-color: var(--accent-crimson);
+    box-shadow: 0 0 20px rgba(255, 42, 85, 0.7);
+    transform: translate(-50%, -50%) scale(1.14);
+  }
+
+  /* Hit-Marker Flash on Reticle */
+  #hit-marker {
+    position: absolute;
+    left: 50%;
+    top: 47%;
+    width: 36px;
+    height: 36px;
+    transform: translate(-50%, -50%) scale(0.75);
+    opacity: 0;
+    transition: opacity 0.07s ease-out, transform 0.07s ease-out;
+  }
+
+  #hit-marker::before, #hit-marker::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 34px;
+    height: 3px;
+    background: #fef08a;
+    box-shadow: 0 0 10px #f59e0b;
+    border-radius: 2px;
+  }
+
+  #hit-marker::before { transform: translate(-50%, -50%) rotate(45deg); }
+  #hit-marker::after { transform: translate(-50%, -50%) rotate(-45deg); }
+
+  #hit-marker.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.15);
+  }
+
+  /* Dynamic Lead Prediction Diamond */
+  #lead-reticle {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    transform: translate(-50%, -50%) rotate(45deg);
+    border: 2px solid #00f5ff;
+    box-shadow: 0 0 14px rgba(0, 245, 255, 0.9);
+    border-radius: 4px;
+    display: none;
+  }
+
+  /* Active Checkpoint Ring Waypoint */
+  #waypoint-marker {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .waypoint-diamond {
+    width: 24px;
+    height: 24px;
+    border: 2.5px solid var(--accent-gold);
+    background: rgba(251, 191, 36, 0.16);
+    transform: rotate(45deg);
+    box-shadow: 0 0 14px rgba(251, 191, 36, 0.7);
+    border-radius: 4px;
+  }
+
+  #waypoint-dist {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 800;
+    color: #fef08a;
+    background: rgba(11, 17, 32, 0.75);
+    padding: 2px 6px;
+    border-radius: 6px;
+    border: 1px solid rgba(251, 191, 36, 0.4);
+  }
+
+  #ring-offscreen-arrow {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    transform: translate(-50%, -50%);
+    color: var(--accent-gold);
+    font-size: 1.35rem;
+    font-weight: 800;
+    text-shadow: 0 0 12px rgba(251, 191, 36, 0.95);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Enemy Target Brackets & Edge Arrows */
+  .enemy-bracket {
+    position: absolute;
+    width: 54px;
+    height: 54px;
+    transform: translate(-50%, -50%);
+    border: 2px solid rgba(255, 42, 85, 0.85);
+    border-radius: 10px;
+    box-shadow: 0 0 12px rgba(255, 42, 85, 0.4);
+    display: none;
+  }
+
+  .enemy-hp-bar {
+    position: absolute;
+    top: -11px;
+    left: 2px;
+    right: 2px;
+    height: 5px;
+    background: rgba(0, 0, 0, 0.65);
+    border-radius: 99px;
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+  }
+
+  .enemy-hp-fill {
+    height: 100%;
+    width: 100%;
+    background: linear-gradient(90deg, #ff2a55, #fb923c);
+    transition: width 0.1s;
+  }
+
+  .enemy-dist-tag {
+    position: absolute;
+    bottom: -17px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.66rem;
+    font-weight: 800;
+    color: #fda4af;
+    text-shadow: 0 1px 4px #000;
+    white-space: nowrap;
+  }
+
+  .offscreen-arrow {
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    transform: translate(-50%, -50%);
+    color: var(--accent-crimson);
+    font-size: 1.15rem;
+    font-weight: 800;
+    text-shadow: 0 0 10px rgba(255, 42, 85, 0.9);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Main Glassmorphism HUD */
+  #hud {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 6;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 14px 18px;
+  }
+
+  .hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+  }
+
+  .score-row {
+    display: flex;
+    gap: 18px;
+    align-items: center;
+  }
+
+  .stat-block {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: var(--text-dim);
+    text-transform: uppercase;
+  }
+
+  .stat-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1.18rem;
+    font-weight: 800;
+    color: var(--text-main);
+  }
+
+  .stat-val.gold { color: var(--accent-gold); }
+  .stat-val.cyan { color: var(--accent-cyan); }
+  .stat-val.crimson { color: #fb7185; }
+
+  .theme-controls {
+    pointer-events: auto;
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .theme-btn {
+    background: rgba(255, 255, 255, 0.07);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: var(--text-main);
+    font-family: 'Inter', sans-serif;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 6px 10px;
+    border-radius: 9px;
+    cursor: pointer;
+    transition: all 0.16s ease;
+  }
+
+  .theme-btn:hover {
+    background: rgba(255, 255, 255, 0.18);
+    transform: translateY(-1px);
+  }
+
+  .theme-btn.active {
+    background: rgba(0, 245, 255, 0.2);
+    border-color: var(--accent-cyan);
+    color: #a5f3fc;
+    box-shadow: 0 0 12px rgba(0, 245, 255, 0.35);
+  }
+
+  /* Center Event & Stunt Feed */
+  #event-feed {
+    position: absolute;
+    top: 84px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    pointer-events: none;
+  }
+
+  .feed-toast {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.86rem;
+    font-weight: 800;
+    padding: 5px 14px;
+    border-radius: 99px;
+    background: rgba(11, 17, 32, 0.82);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+    animation: toastPop 2.2s forwards ease-out;
+    white-space: nowrap;
+  }
+
+  @keyframes toastPop {
+    0% { opacity: 0; transform: translateY(10px) scale(0.92); }
+    14% { opacity: 1; transform: translateY(0) scale(1); }
+    80% { opacity: 1; transform: translateY(-4px); }
+    100% { opacity: 0; transform: translateY(-14px); }
+  }
+
+  /* Bottom HUD Row */
+  .hud-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 14px;
+  }
+
+  .gauge-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 195px;
+  }
+
+  .bar-container {
+    width: 100%;
+    height: 10px;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: 99px;
+    overflow: hidden;
+    margin-top: 4px;
+  }
+
+  .bar-fill {
+    height: 100%;
+    width: 100%;
+    border-radius: 99px;
+    transition: width 0.12s ease-out;
+  }
+
+  #hull-bar {
+    background: linear-gradient(90deg, #ef4444, #10b981);
+  }
+
+  .telemetry-mini {
+    display: flex;
+    gap: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.74rem;
+    color: var(--text-dim);
+  }
+
+  .telemetry-mini span strong {
+    color: var(--text-main);
+  }
+
+  /* Center Shift-Boost & Weapons Panel */
+  .boost-center-panel {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 280px;
+    border-color: rgba(0, 245, 255, 0.36);
+  }
+
+  .boost-bar-wide {
+    width: 250px;
+    height: 13px;
+    background: rgba(255, 255, 255, 0.13);
+    border-radius: 99px;
+    overflow: hidden;
+    margin: 5px 0 6px;
+    border: 1px solid rgba(0, 245, 255, 0.3);
+  }
+
+  #boost-bar {
+    background: linear-gradient(90deg, #0284c7, #00f5ff, #fde047);
+    box-shadow: 0 0 14px rgba(0, 245, 255, 0.75);
+  }
+
+  .weapon-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+
+  .w-pill {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 7px;
+    background: rgba(0, 245, 255, 0.14);
+    border: 1px solid rgba(0, 245, 255, 0.35);
+    color: #a5f3fc;
+  }
+
+  .missile-pips {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    color: #fde68a;
+    background: rgba(251, 191, 36, 0.12);
+    border: 1px solid rgba(251, 191, 36, 0.35);
+    padding: 3px 8px;
+    border-radius: 7px;
+  }
+
+  .m-pip {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #fbbf24;
+    box-shadow: 0 0 8px #fbbf24;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+
+  .m-pip.empty {
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: none;
+    transform: scale(0.8);
+  }
+
+  /* Mini-Radar */
+  .radar-wrap {
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  #radar-canvas {
+    width: 118px;
+    height: 118px;
+    border-radius: 50%;
+    display: block;
+  }
+
+  /* Touch Controls for Mobile / Tablet */
+  #touch-controls {
+    position: fixed;
+    bottom: 145px;
+    left: 16px;
+    right: 16px;
+    display: none;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 8;
+  }
+
+  @media (pointer: coarse), (max-width: 820px) {
+    #touch-controls { display: flex; }
+    .boost-center-panel { min-width: 210px; }
+    .boost-bar-wide { width: 185px; }
+    #radar-canvas { width: 88px; height: 88px; }
+  }
+
+  .touch-pad {
+    pointer-events: auto;
+    display: grid;
+    grid-template-columns: repeat(3, 50px);
+    gap: 6px;
+  }
+
+  .t-btn {
+    height: 48px;
+    border-radius: 12px;
+    background: rgba(15, 23, 42, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    touch-action: manipulation;
+  }
+
+  .t-btn:active {
+    background: rgba(0, 245, 255, 0.35);
+    border-color: var(--accent-cyan);
+  }
+
+  /* Start & Game Over Modal Overlay */
+  #overlay-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgba(5, 9, 20, 0.76);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+
+  .modal-card {
+    max-width: 580px;
+    width: 100%;
+    background: rgba(13, 20, 38, 0.9);
+    border: 1px solid rgba(0, 245, 255, 0.35);
+    border-radius: 22px;
+    padding: 28px 30px;
+    text-align: center;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.65), 0 0 40px rgba(0, 245, 255, 0.14);
+  }
+
+  .modal-badge {
+    display: inline-block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: var(--accent-cyan);
+    background: rgba(0, 245, 255, 0.12);
+    border: 1px solid rgba(0, 245, 255, 0.35);
+    padding: 4px 12px;
+    border-radius: 99px;
+    margin-bottom: 12px;
+  }
+
+  .modal-title {
+    font-size: 2.1rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin-bottom: 10px;
+    background: linear-gradient(135deg, #ffffff 20%, #67e8f9 65%, #fbbf24 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .modal-desc {
+    font-size: 0.94rem;
+    line-height: 1.55;
+    color: #cbd5e1;
+    margin-bottom: 18px;
+  }
+
+  .controls-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px 14px;
+    text-align: left;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 22px;
+    font-size: 0.8rem;
+    color: #e2e8f0;
+  }
+
+  @media (max-width: 540px) {
+    .controls-grid { grid-template-columns: 1fr; }
+    .modal-title { font-size: 1.65rem; }
+  }
+
+  .controls-grid span {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 800;
+    color: var(--accent-gold);
+  }
+
+  .primary-btn {
+    background: linear-gradient(135deg, #06b6d4, #2563eb);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: #fff;
+    font-family: 'Inter', sans-serif;
+    font-size: 1rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    padding: 14px 36px;
+    border-radius: 14px;
+    cursor: pointer;
+    box-shadow: 0 10px 28px rgba(6, 182, 212, 0.45);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+
+  .primary-btn:hover {
+    transform: translateY(-2px) scale(1.02);
+    box-shadow: 0 14px 34px rgba(6, 182, 212, 0.65);
+  }
+
+  .primary-btn:active {
+    transform: translateY(1px);
+  }
+
+#mission-panel{position:absolute;top:88px;left:18px;max-width:245px;display:grid;gap:6px;pointer-events:none;border-color:rgba(56,189,248,.38)}
+#mission-name{font-size:.92rem;font-weight:800;color:#e0f2fe}#mission-detail,#region-name{font-size:.72rem;color:#cbd5e1}#mission-fill{background:linear-gradient(90deg,#22d3ee,#a3e635)}
+#ring-kind{font-family:'JetBrains Mono',monospace;font-size:.65rem;color:#fff;white-space:nowrap;background:#142436b5;padding:2px 5px;border-radius:5px}
+#speed-vignette{position:fixed;inset:0;pointer-events:none;z-index:3;background:radial-gradient(ellipse at center,transparent 42%,rgba(56,189,248,.12) 75%,rgba(10,35,65,.42));opacity:0;transition:opacity .2s}
+#pause-layer{position:fixed;inset:0;display:none;z-index:22;background:#061020b5;backdrop-filter:blur(8px);align-items:center;justify-content:center}#pause-layer .modal-card{max-width:360px} .modal-card{max-height:95vh;overflow:auto} .modal-title{letter-spacing:-.045em}
+@media(max-width:820px){#mission-panel{top:126px;left:10px;max-width:155px;padding:7px}#mission-name{font-size:.72rem}#region-name{display:none}#event-feed{top:165px}.score-row{gap:10px}.hud{padding:8px}.theme-controls{gap:4px}}
+
+#poi-banner{position:fixed;top:22%;left:50%;transform:translate(-50%,-12px);opacity:0;transition:opacity .3s,transform .3s;z-index:7;pointer-events:none;text-align:center;width:min(90%,590px);text-shadow:0 2px 14px #000}
+#poi-banner.show{opacity:1;transform:translate(-50%,0)}#poi-banner small{font:700 .7rem 'JetBrains Mono',monospace;letter-spacing:.28em;color:#e0f2fe}#poi-title{font-size:clamp(1.5rem,4vw,2.7rem);font-weight:800;letter-spacing:-.045em}#poi-desc{font-size:.8rem;color:#e2e8f0}
+#gate-time{font:800 .86rem 'JetBrains Mono',monospace;color:#fbbf24}#gate-clock{height:4px;background:#ffffff21;border-radius:5px;overflow:hidden}#gate-clock-fill{height:100%;background:#fbbf24}#gate-dest{font-size:.72rem;color:#cbd5e1}#boundary-alert{position:fixed;top:12%;left:50%;transform:translateX(-50%);opacity:0;color:#ffb19c;font-weight:800;font-size:.8rem;z-index:8;pointer-events:none;text-shadow:0 1px 8px black;transition:opacity .2s}
+#frontier-map{position:fixed;inset:0;z-index:24;background:#06101be8;display:none;align-items:center;justify-content:center;flex-direction:column;gap:12px;backdrop-filter:blur(9px)}#frontier-map canvas{width:min(86vw,70vh,650px);height:auto;border:1px solid #46758b;border-radius:14px;background:#153b4e}#frontier-map p{color:#b4d2e3;font-size:.82rem}#map-close{padding:8px 24px}
+</style>
+
+<!-- Three.js r160 ES Module Import Map -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="game-canvas"></canvas>
+<div id="cockpit-frame"></div><div id="speed-vignette"></div>
+
+<!-- 2D Tactical Overlay for Crosshairs, Lead Pip, Waypoints & Enemy Brackets -->
+<div id="tactical-layer">
+  <div id="gun-reticle"></div>
+  <div id="hit-marker"></div>
+  <div id="lead-reticle"></div>
+  <div id="ring-offscreen-arrow">▲</div>
+  <div id="waypoint-marker">
+    <div class="waypoint-diamond"></div>
+    <div id="waypoint-dist">180m</div><div id="ring-kind">CHECKPOINT</div>
+  </div>
+  <div id="enemy-hud-pool"></div>
+</div>
+
+<!-- Main Heads-Up Display -->
+<div id="hud">
+  <div class="hud-top">
+    <div class="glass-panel score-row">
+      <div class="stat-block">
+        <span class="stat-label">SCORE</span>
+        <span class="stat-val gold" id="hud-score">0</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">COMBO</span>
+        <span class="stat-val cyan" id="hud-combo">1.0x</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">RINGS</span>
+        <span class="stat-val" id="hud-rings">0</span>
+      </div>
+      <div class="stat-block">
+        <span class="stat-label">KILLS</span>
+        <span class="stat-val crimson" id="hud-kills">0</span>
+      </div>
+    </div>
+
+    <div class="glass-panel theme-controls">
+      <button class="theme-btn active" data-theme="daylight">DAYLIGHT</button><button class="theme-btn" data-theme="sunset">SUNSET</button>
+      <button class="theme-btn" data-theme="cyber">CYBER-NIGHT</button>
+      <button class="theme-btn" data-theme="storm">STORM</button>
+      <button class="theme-btn" id="mode-btn" title="Toggle relaxed exploration [G]">MODE: ARCADE</button><button class="theme-btn" id="pause-btn">PAUSE</button><button class="theme-btn" id="map-btn">MAP [B]</button><button class="theme-btn" id="quality-btn">HD: ON</button><button class="theme-btn" id="cam-btn" title="Toggle Chase / Nose Cam [C]">CAM: CHASE</button>
+      <button class="theme-btn" id="invert-btn" title="Invert W/S Pitch [I]">PITCH: NORMAL</button>
+      <button class="theme-btn" id="mute-btn" title="Toggle Audio [M]">AUDIO: ON</button>
+    </div>
+  </div>
+
+  <div id="event-feed"></div>
+<div id="poi-banner"><small>ENTERING</small><div id="poi-title"></div><div id="poi-desc"></div></div><div id="boundary-alert">AIRSPACE BOUNDARY · TURN INWARD</div>
+<div class="glass-panel" id="mission-panel"><span class="stat-label">LIVE CONTRACT · <span id="mission-count">01</span></span><div id="mission-name">Ring runner</div><div id="mission-detail">Clear 3 randomized gates</div><div class="bar-container"><div class="bar-fill" id="mission-fill" style="width:0%"></div></div><div id="region-name">Ace Airfield</div><div id="gate-dest">NEXT · —</div><div id="gate-time">-- s</div><div id="gate-clock"><div id="gate-clock-fill"></div></div><div class="stat-label" id="discovery-count">DISTRICTS 0/16</div><div class="stat-label">BEST SCORE <span id="best-score">0</span> · <span id="flight-mode">ARCADE</span></div></div>
+
+  <div class="hud-bottom">
+    <div class="glass-panel gauge-group">
+      <div>
+        <div class="stat-label">HULL INTEGRITY</div>
+        <div class="bar-container"><div class="bar-fill" id="hull-bar"></div></div>
+      </div>
+      <div class="telemetry-mini">
+        <span>SPD <strong id="hud-speed">419 KT</strong></span>
+        <span>ALT <strong id="hud-alt">120 FT</strong></span>
+        <span>HDG <strong id="hud-heading">000°</strong></span><span>[SPACE] <strong>ROLL</strong></span>
+      </div>
+    </div>
+
+    <div class="glass-panel boost-center-panel">
+      <div class="stat-label" style="color:#67e8f9">[SHIFT] AFTERBURNER BOOST • RINGS REFILL +22%</div>
+      <div class="boost-bar-wide"><div class="bar-fill" id="boost-bar"></div></div>
+      <div class="weapon-row">
+        <span class="w-pill">[L-CLICK / F] CANNONS</span>
+        <div class="missile-pips" id="missile-pips">
+          <span>[R-CLICK / E] SEEKERS</span>
+          <div class="m-pip" id="mpip-0"></div>
+          <div class="m-pip" id="mpip-1"></div>
+          <div class="m-pip" id="mpip-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="glass-panel radar-wrap">
+      <canvas id="radar-canvas" width="140" height="140"></canvas>
+    </div>
+  </div>
+</div>
+
+<!-- Responsive Touch Controls -->
+<div id="touch-controls">
+  <div class="touch-pad">
+    <div></div>
+    <button class="t-btn" data-key="KeyW">▲</button>
+    <div></div>
+    <button class="t-btn" data-key="KeyA">◄</button>
+    <button class="t-btn" data-key="KeyS">▼</button>
+    <button class="t-btn" data-key="KeyD">►</button>
+  </div>
+  <div class="touch-pad">
+    <button class="t-btn" style="border-color:#00f5ff;color:#00f5ff" data-key="KeyF">FIRE</button>
+    <button class="t-btn" style="border-color:#fbbf24;color:#fbbf24" data-key="KeyE">SEEK</button>
+    <button class="t-btn" style="border-color:#38bdf8;color:#38bdf8" data-key="ShiftLeft">BOOST</button>
+    <div></div>
+    <button class="t-btn" data-key="Space">ROLL</button>
+    <div></div>
+  </div>
+</div>
+
+<!-- Start / Game Over Overlay -->
+<div id="overlay-modal">
+  <div class="modal-card" id="modal-content">
+    <div class="modal-badge">OPEN AIRSPACE · ENDLESS ARCADE</div>
+    <h1 class="modal-title">WORLD ATLAS</h1>
+    <p class="modal-desc">Sixteen districts, one vast coastal battleground. Thread precision gates, dodge six rival fighters taking turns attacking, and discover iconic world landmarks. [B] opens the tactical map; [Q] airbrakes for tight approaches.</p>
+    <div class="controls-grid">
+      <div><span>A / D / ◄ / ►</span> — Car-Like Turn Steering</div>
+      <div><span>W / S / ▲ / ▼</span> — Climb & Dive (Auto-Levels)</div>
+      <div><span>LEFT CLICK / F</span> — Dual Plasma Cannons</div>
+      <div><span>RIGHT CLICK / E</span> — Homing Seeker Missiles</div>
+      <div><span>SHIFT</span> — Afterburner (Rings Refill +32%)</div>
+      <div><span>SPACE / C / T</span> — Roll / Cam / Theme</div><div><span>Q / ESC</span> — Airbrake / Pause</div><div><span>G</span> — Arcade / Free Flight</div>
+    </div>
+    <button class="primary-btn" id="start-btn">LAUNCH FLIGHT</button>
+  </div>
+</div>
+
+<div id="pause-layer"><div class="modal-card"><div class="modal-badge">FLIGHT PAUSED</div><h1 class="modal-title">HOLDING PATTERN</h1><p class="modal-desc">Take a moment. Your aircraft will wait.</p><button id="resume-btn" class="primary-btn">RESUME</button></div></div>
+<div id="frontier-map"><h2>WORLD ATLAS</h2><canvas id="frontier-chart" width="760" height="760"></canvas><p>Gold: next gate · Cyan: aircraft · Red: hostile · Green check: discovered</p><button class="primary-btn" id="map-close">RETURN TO FLIGHT [B]</button></div>
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+
+// ============================================================================
+// 1. PROCEDURAL WEB AUDIO SYNTHESIZER (Zero External Audio Files)
+// ============================================================================
+class SoundEngine {
+  constructor() {
+    this.ctx = null;
+    this.initialized = false;
+    this.muted = false;
+    this.engineOsc = null;
+    this.engineGain = null;
+    this.afterburnerGain = null;
+  }
+
+  init() {
+    if (this.initialized) {
+      if (this.ctx && this.ctx.state === 'suspended') this.ctx.resume();
+      return;
+    }
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      this.ctx = new AudioCtx();
+      this.initialized = true;
+
+      // Continuous Turbine Engine Oscillator
+      this.engineOsc = this.ctx.createOscillator();
+      this.engineOsc.type = 'sawtooth';
+      this.engineOsc.frequency.value = 68;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.value = 210;
+
+      this.engineGain = this.ctx.createGain();
+      this.engineGain.gain.value = 0.0;
+
+      this.engineOsc.connect(filter);
+      filter.connect(this.engineGain);
+      this.engineGain.connect(this.ctx.destination);
+      this.engineOsc.start();
+
+      // Continuous Filtered Noise for Afterburner Roar
+      const bufferSize = this.ctx.sampleRate * 2;
+      const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+      const data = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+      const noiseSrc = this.ctx.createBufferSource();
+      noiseSrc.buffer = noiseBuffer;
+      noiseSrc.loop = true;
+
+      const abFilter = this.ctx.createBiquadFilter();
+      abFilter.type = 'bandpass';
+      abFilter.frequency.value = 340;
+      abFilter.Q.value = 0.9;
+
+      this.afterburnerGain = this.ctx.createGain();
+      this.afterburnerGain.gain.value = 0.0;
+
+      noiseSrc.connect(abFilter);
+      abFilter.connect(this.afterburnerGain);
+      this.afterburnerGain.connect(this.ctx.destination);
+      noiseSrc.start();
+    } catch (e) {
+      // Fallback gracefully if Web Audio is blocked
+    }
+  }
+
+  setMuted(m) {
+    this.muted = m;
+    if (this.muted && this.initialized) {
+      this.engineGain.gain.value = 0;
+      this.afterburnerGain.gain.value = 0;
+    }
+  }
+
+  updateFlight(speedNorm, boosting, active) {
+    if (!this.initialized || this.muted || !active) {
+      if (this.initialized) {
+        this.engineGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+        this.afterburnerGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.08);
+      }
+      return;
+    }
+    const now = this.ctx.currentTime;
+    const freq = 62 + speedNorm * 65 + (boosting ? 28 : 0);
+    this.engineOsc.frequency.setTargetAtTime(freq, now, 0.08);
+    this.engineGain.gain.setTargetAtTime(0.055 + speedNorm * 0.035, now, 0.08);
+    this.afterburnerGain.gain.setTargetAtTime(boosting ? 0.09 : 0.012, now, 0.08);
+  }
+
+  playPlayerCannon() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.setValueAtTime(620, now);
+    osc.frequency.exponentialRampToValueAtTime(115, now + 0.09);
+    gain.gain.setValueAtTime(0.09, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.095);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.1);
+  }
+
+  playEnemyShot() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(420, now);
+    osc.frequency.exponentialRampToValueAtTime(90, now + 0.11);
+    gain.gain.setValueAtTime(0.05, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.12);
+  }
+
+  playBulletFlyby() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(950, now);
+    osc.frequency.exponentialRampToValueAtTime(240, now + 0.14);
+    gain.gain.setValueAtTime(0.06, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  playHitConfirm() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(1120, now);
+    osc.frequency.setValueAtTime(1480, now + 0.03);
+    gain.gain.setValueAtTime(0.09, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.085);
+  }
+
+  playMissileLaunch() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(260, now);
+    osc.frequency.exponentialRampToValueAtTime(940, now + 0.34);
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.37);
+  }
+
+  playRingPass(pitchBoost = 0) {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const notes = [523.25, 659.25, 783.99, 1046.5];
+    notes.forEach((freq, idx) => {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq + pitchBoost * 12, now + idx * 0.055);
+      gain.gain.setValueAtTime(0.11, now + idx * 0.055);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.055 + 0.28);
+      osc.connect(gain);
+      gain.connect(this.ctx.destination);
+      osc.start(now + idx * 0.055);
+      osc.stop(now + idx * 0.055 + 0.3);
+    });
+  }
+
+  playBoostGate() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(340, now);
+    osc.frequency.exponentialRampToValueAtTime(1240, now + 0.32);
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.34);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.35);
+  }
+
+  playBarrelRoll() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(220, now);
+    osc.frequency.exponentialRampToValueAtTime(480, now + 0.16);
+    osc.frequency.exponentialRampToValueAtTime(200, now + 0.34);
+    gain.gain.setValueAtTime(0.09, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.37);
+  }
+
+  playExplosion() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(135, now);
+    osc.frequency.exponentialRampToValueAtTime(28, now + 0.55);
+    gain.gain.setValueAtTime(0.22, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.58);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.6);
+  }
+
+  playThunder() {
+    if (!this.initialized || this.muted) return;
+    const now = this.ctx.currentTime;
+    const osc = this.ctx.createOscillator();
+    const gain = this.ctx.createGain();
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(75, now);
+    osc.frequency.exponentialRampToValueAtTime(24, now + 0.85);
+    gain.gain.setValueAtTime(0.14, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.9);
+    osc.connect(gain);
+    gain.connect(this.ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.92);
+  }
+}
+
+const sfx = new SoundEngine();
+
+// ============================================================================
+// 2. PROCEDURAL CANVAS TEXTURES (Runway, Carrier Deck, City Windows)
+// ============================================================================
+function createRunwayTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 1024;
+  const ctx = c.getContext('2d');
+
+  // Asphalt base
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(0, 0, 256, 1024);
+
+  // Subtle runway tire skid grain
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+  ctx.fillRect(92, 60, 72, 904);
+
+  // Side border stripes
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(14, 0, 6, 1024);
+  ctx.fillRect(236, 0, 6, 1024);
+
+  // Threshold piano keys (both ends)
+  for (let i = 0; i < 6; i++) {
+    const x = 34 + i * 33;
+    ctx.fillRect(x, 22, 18, 56);
+    ctx.fillRect(x, 946, 18, 56);
+  }
+
+  // Centerline dashed markings
+  for (let y = 110; y < 900; y += 64) {
+    ctx.fillRect(123, y, 10, 36);
+  }
+
+  // Touchdown zone blocks
+  ctx.fillRect(58, 130, 24, 42);
+  ctx.fillRect(174, 130, 24, 42);
+  ctx.fillRect(58, 852, 24, 42);
+  ctx.fillRect(174, 852, 24, 42);
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createCarrierDeckTexture() {
+  const c = document.createElement('canvas');
+  c.width = 256;
+  c.height = 1024;
+  const ctx = c.getContext('2d');
+
+  ctx.fillStyle = '#334155';
+  ctx.fillRect(0, 0, 256, 1024);
+
+  // Deck edge lines
+  ctx.fillStyle = '#fbbf24';
+  ctx.fillRect(18, 0, 5, 1024);
+  ctx.fillRect(233, 0, 5, 1024);
+
+  // Angled flight deck centerline
+  ctx.fillStyle = '#f8fafc';
+  for (let y = 40; y < 980; y += 54) {
+    ctx.fillRect(125, y, 6, 30);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.anisotropy = 4;
+  return tex;
+}
+
+function createBuildingTexture() {
+ const c=document.createElement('canvas'); c.width=512;c.height=1024;const ctx=c.getContext('2d');
+ ctx.fillStyle='#6e8490';ctx.fillRect(0,0,512,1024);
+ for(let row=0;row<22;row++)for(let col=0;col<10;col++){
+  const x=col*51+4,y=row*46+5,lit=(row*13+col*7)%11<3;
+  const g=ctx.createLinearGradient(x,y,x+42,y+38);g.addColorStop(0,lit?'#f8dca6':'#9cc9df');g.addColorStop(.48,lit?'#b39e7b':'#47768e');g.addColorStop(1,'#243d51');ctx.fillStyle=g;ctx.fillRect(x,y,43,36);
+  ctx.fillStyle='#c3d4dc';ctx.fillRect(x+20,y,2,36);ctx.fillRect(x,y+18,43,1);ctx.fillStyle='#253b48';ctx.fillRect(x,y+36,43,3);
+ }
+ const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;tex.anisotropy=8;tex.wrapS=tex.wrapT=THREE.RepeatWrapping;return tex;
+}
+
+// ============================================================================
+// 3. THREE.JS SCENE, RENDERER & POST-PROCESSING BLOOM SETUP
+// ============================================================================
+const canvas = document.getElementById('game-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0xffbd98, 0.00048);
+
+const camera = new THREE.PerspectiveCamera(65, window.innerWidth / window.innerHeight, 0.5, 7200);
+
+// Post-Processing Composer with Selective UnrealBloomPass
+let composer = null;
+let bloomPass = null;
+try {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  bloomPass = new UnrealBloomPass(
+    new THREE.Vector2(window.innerWidth, window.innerHeight),
+    0.55, // strength
+    0.45, // radius
+    0.82  // threshold
+  );
+  composer.addPass(bloomPass);
+  composer.addPass(new OutputPass());
+} catch (e) {
+  composer = null;
+}
+
+// Lighting Setup
+const hemiLight = new THREE.HemisphereLight(0xffe4c4, 0x1e3a5f, 1.05);
+scene.add(hemiLight);
+
+const sunLight = new THREE.DirectionalLight(0xffedd5, 2.2);
+sunLight.position.set(220, 260, -180);
+scene.add(sunLight);
+
+// Sky Dome Shader (Smooth Horizon-to-Zenith Gradient)
+const skyUniforms = {
+  uTopColor: { value: new THREE.Color(0x1d4ed8) },
+  uHorizonColor: { value: new THREE.Color(0xfb923c) },
+  uBottomColor: { value: new THREE.Color(0x0f172a) }
+};
+
+const skyDome = new THREE.Mesh(
+  new THREE.SphereGeometry(6100, 32, 24),
+  new THREE.ShaderMaterial({
+    side: THREE.BackSide,
+    depthWrite: false,
+    uniforms: skyUniforms,
+    vertexShader: `
+      varying vec3 vWorldPos;
+      void main() {
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vWorldPos = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uTopColor;
+      uniform vec3 uHorizonColor;
+      uniform vec3 uBottomColor;
+      varying vec3 vWorldPos;
+      void main() {
+        vec3 ray = normalize(vWorldPos-cameraPosition); float h = ray.y;
+        vec3 col = h >= 0.0
+          ? mix(uHorizonColor, uTopColor, pow(h, 0.55))
+          : mix(uHorizonColor, uBottomColor, pow(-h, 0.5));
+        vec3 sd=normalize(vec3(.55,.32,-.72)); float sunDot=max(dot(ray,sd),0.0);
+        col += vec3(1.,.62,.28)*pow(sunDot,22.)*.26*length(uHorizonColor);
+        col += vec3(1.,.82,.52)*smoothstep(.9991,.99965,sunDot)*1.8*length(uHorizonColor);
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `
+  })
+);
+scene.add(skyDome);
+
+// Animated Custom GLSL Ocean Shader
+const oceanUniforms = {
+ uTime:{value:0},uDeepColor:{value:new THREE.Color(0x07537a)},uShallowColor:{value:new THREE.Color(0x20c7b8)},
+ uSunDir:{value:new THREE.Vector3(.55,.32,-.72).normalize()},uSunColor:{value:new THREE.Color(0xffdf9e)},
+ uSkyTop:{value:skyUniforms.uTopColor.value},uSkyHorizon:{value:skyUniforms.uHorizonColor.value},
+ uIslands:{value:Array.from({length:18},()=>new THREE.Vector4(99999,99999,1,1))},uFogColor:{value:scene.fog.color},uFogDensity:{value:.00045}
+};
+const waveGLSL = `
+ float wave(vec2 p,float t){return .46*sin(dot(p,vec2(.072,.031))+t*1.6)+.25*sin(dot(p,vec2(-.048,.108))-t*2.1)+.13*sin(dot(p,vec2(.17,.10))+t*2.8);}
+ `;
+const oceanMesh = new THREE.Mesh(new THREE.PlaneGeometry(10000,10000,240,240),new THREE.ShaderMaterial({
+ uniforms:oceanUniforms,
+ vertexShader:`uniform float uTime; varying vec3 vWorldPos; ${waveGLSL}
+ void main(){vec4 wp=modelMatrix*vec4(position,1.);wp.y+=wave(wp.xz,uTime);vWorldPos=wp.xyz;gl_Position=projectionMatrix*viewMatrix*wp;}`,
+ fragmentShader:`uniform float uTime;uniform vec3 uDeepColor,uShallowColor,uSunDir,uSunColor,uSkyTop,uSkyHorizon,uFogColor;uniform float uFogDensity;uniform vec4 uIslands[18]; varying vec3 vWorldPos; ${waveGLSL}
+ void main(){vec2 p=vWorldPos.xz;float t=uTime;vec3 V=normalize(cameraPosition-vWorldPos);float d=length(cameraPosition-vWorldPos);
+ float w=wave(p,t);float dx=(wave(p+vec2(.3,0.),t)-w)/.3;float dz=(wave(p+vec2(0.,.3),t)-w)/.3;
+ float fine=sin(dot(p,vec2(1.3,.53))+t*3.2)*cos(dot(p,vec2(-.68,1.18))-t*2.6);
+ float ripple=1.-smoothstep(65.,650.,d);vec3 N=normalize(vec3(-dx-fine*.085*ripple,1.,-dz+sin(p.x*.87-p.y*.8+t*2.5)*.08*ripple));
+ float edge=10000.;for(int i=0;i<18;i++){vec4 a=uIslands[i];float r=length((p-a.xy)/a.zw);edge=min(edge,abs(r-1.)*min(a.z,a.w));}
+ float canalEdge=abs(abs(p.x-605.-22.*sin((p.y+100.)/320.*3.))-28.);if(abs(p.y+100.)<320.&&abs(p.x-605.)<75.)edge=min(edge,canalEdge);
+ float shallow=1.-smoothstep(0.,78.,edge);vec3 body=mix(uDeepColor,uShallowColor,shallow*.82+.09+fine*.035*ripple);
+ vec3 R=reflect(-V,N);vec3 sky=mix(uSkyHorizon,uSkyTop,pow(clamp(R.y,0.,1.),.55));float F=.025+.975*pow(1.-max(dot(V,N),0.),5.);
+ vec3 H=normalize(V+uSunDir);float glint=pow(max(dot(N,H),0.),92.)+pow(max(dot(N,H),0.),18.)*.11;
+ float foam=(1.-smoothstep(0.,13.,edge)) * smoothstep(.18,.58,sin(edge*.65-t*2.1)*.56+fine*.30);float crest=smoothstep(.67,.84,w)*.19*ripple;
+ vec3 col=mix(body,sky,F*.85)+uSunColor*glint*1.7;col=mix(col,vec3(.78,.94,.94),clamp(foam*.68+crest,0.,.8));
+ float fog=1.-exp(-d*d*uFogDensity*uFogDensity);col=mix(col,uFogColor,fog*.87);gl_FragColor=vec4(col,1.);}
+ `}));
+oceanMesh.rotation.x=-Math.PI/2;scene.add(oceanMesh);
+
+// ============================================================================
+// 4. EXPANDED AIRPORT & ARCHIPELAGO PLAYGROUND
+// ============================================================================
+const worldGroup = new THREE.Group();
+scene.add(worldGroup);
+
+const solidColliders = [];
+const stuntZones = [];
+const boostGates = [];
+const windTurbineRotors = [];
+const balloonData = [];
+const seagullData = [];
+const lavaEmbers = [];
+
+function addBoxCollider(cx, cy, cz, sx, sy, sz, name = 'Structure') {
+  solidColliders.push({
+    minX: cx - sx * 0.5, maxX: cx + sx * 0.5,
+    minY: cy - sy * 0.5, maxY: cy + sy * 0.5,
+    minZ: cz - sz * 0.5, maxZ: cz + sz * 0.5,
+    name
+  });
+}
+
+// Shared Stylized Materials
+const sandMat = new THREE.MeshStandardMaterial({ color: 0xfde68a, roughness: 0.9 });
+const grassMat = new THREE.MeshStandardMaterial({ color: 0x16a34a, roughness: 0.85 });
+const rockMat = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.92, flatShading: true });
+const concreteMat = new THREE.MeshStandardMaterial({ color: 0xe2e8f0, roughness: 0.65 });
+const steelDarkMat = new THREE.MeshStandardMaterial({ color: 0x1e293b, roughness: 0.5, metalness: 0.4 });
+const metalRedMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, roughness: 0.45 });
+const glassCyanMat = new THREE.MeshStandardMaterial({ color: 0x00f5ff, emissive: 0x0284c7, emissiveIntensity: 0.65, roughness: 0.2 });
+
+// --- A. Main Airport Island ---
+const mainSand = new THREE.Mesh(new THREE.CylinderGeometry(156, 174, 5, 32), sandMat);
+mainSand.position.set(0, 2.2, 0);
+worldGroup.add(mainSand);
+
+const mainGrass = new THREE.Mesh(new THREE.CylinderGeometry(142, 150, 3.2, 32), grassMat);
+mainGrass.position.set(0, 4.8, 0);
+worldGroup.add(mainGrass);
+
+// Paved Runway + Procedural Markings
+const runwayTex = createRunwayTexture();
+const runwayMesh = new THREE.Mesh(
+  new THREE.BoxGeometry(26, 0.4, 240),
+  new THREE.MeshStandardMaterial({ map: runwayTex, roughness: 0.75 })
+);
+runwayMesh.position.set(0, 6.55, 0);
+worldGroup.add(runwayMesh);
+
+// Runway Edge Beacons (InstancedMesh)
+const beaconGeo = new THREE.SphereGeometry(0.65, 8, 8);
+const beaconMat = new THREE.MeshBasicMaterial({ color: 0x38bdf8 });
+const edgeBeaconInst = new THREE.InstancedMesh(beaconGeo, beaconMat, 32);
+const dummy = new THREE.Object3D();
+let bIdx = 0;
+for (let z = -112; z <= 112; z += 15) {
+  [-14.2, 14.2].forEach((x) => {
+    if (bIdx < 32) {
+      dummy.position.set(x, 6.9, z);
+      dummy.rotation.set(0, 0, 0);
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      edgeBeaconInst.setMatrixAt(bIdx++, dummy.matrix);
+    }
+  });
+}
+worldGroup.add(edgeBeaconInst);
+
+// Sequential Approach Strobes (North & South Ends)
+const approachStrobes = [];
+for (let i = 0; i < 6; i++) {
+  const sNorth = new THREE.Mesh(new THREE.SphereGeometry(0.95, 8, 8), new THREE.MeshBasicMaterial({ color: 0xfbbf24 }));
+  sNorth.position.set(0, 6.8, -126 - i * 11);
+  const sSouth = sNorth.clone();
+  sSouth.position.set(0, 6.8, 126 + i * 11);
+  worldGroup.add(sNorth, sSouth);
+  approachStrobes.push(sNorth, sSouth);
+}
+
+// ATC Control Tower + Rotating Radar Dish
+const towerShaft = new THREE.Mesh(new THREE.CylinderGeometry(4.2, 5.6, 30, 12), concreteMat);
+towerShaft.position.set(-34, 21, -24);
+const towerCab = new THREE.Mesh(new THREE.CylinderGeometry(7.2, 5.2, 6.5, 12), glassCyanMat);
+towerCab.position.set(-34, 38, -24);
+const towerRoof = new THREE.Mesh(new THREE.ConeGeometry(8.2, 3.5, 12), metalRedMat);
+towerRoof.position.set(-34, 42.8, -24);
+const radarDish = new THREE.Mesh(new THREE.BoxGeometry(7.5, 1.8, 0.7), new THREE.MeshBasicMaterial({ color: 0x00f5ff }));
+radarDish.position.set(-34, 46, -24);
+worldGroup.add(towerShaft, towerCab, towerRoof, radarDish);
+addBoxCollider(-34, 24, -24, 11, 38, 11, 'ATC Control Tower');
+
+// Animated Runway Windsock
+const windsockPole = new THREE.Mesh(new THREE.CylinderGeometry(0.25, 0.3, 12, 8), concreteMat);
+windsockPole.position.set(-22, 12, 65);
+const windsockCone = new THREE.Mesh(
+  new THREE.ConeGeometry(1.1, 5.2, 10, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xf97316, side: THREE.DoubleSide })
+);
+windsockCone.rotation.z = Math.PI / 2;
+windsockCone.position.set(-19.2, 17.5, 65);
+worldGroup.add(windsockPole, windsockCone);
+
+// TWO Large Open-Ended Hangars (Fly straight through for Stunt Bonus!)
+function buildOpenHangar(hx, hz, label) {
+  const hg = new THREE.Group();
+  hg.position.set(hx, 6.5, hz);
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x334155, roughness: 0.6 });
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x0284c7, roughness: 0.45 });
+
+  const leftWall = new THREE.Mesh(new THREE.BoxGeometry(2.5, 13, 34), wallMat);
+  leftWall.position.set(-13, 6.5, 0);
+  const rightWall = new THREE.Mesh(new THREE.BoxGeometry(2.5, 13, 34), wallMat);
+  rightWall.position.set(13, 6.5, 0);
+  const roof = new THREE.Mesh(new THREE.CylinderGeometry(14.5, 14.5, 34, 16, 1, false, 0, Math.PI), roofMat);
+  roof.rotation.z = Math.PI / 2;
+  roof.rotation.y = Math.PI / 2;
+  roof.position.set(0, 12.5, 0);
+
+  // Glowing portal trim on hangar entrances
+  const trimMat = new THREE.MeshBasicMaterial({ color: 0x00f5ff });
+  const frontTrim = new THREE.Mesh(new THREE.TorusGeometry(13.2, 0.35, 8, 24, Math.PI), trimMat);
+  frontTrim.position.set(0, 12.5, 17);
+  const backTrim = frontTrim.clone();
+  backTrim.position.set(0, 12.5, -17);
+
+  hg.add(leftWall, rightWall, roof, frontTrim, backTrim);
+  worldGroup.add(hg);
+
+  // Colliders only on side walls & roof so center tunnel is flyable!
+  addBoxCollider(hx - 13, 13, hz, 2.6, 13, 34, 'Hangar Wall');
+  addBoxCollider(hx + 13, 13, hz, 2.6, 13, 34, 'Hangar Wall');
+  addBoxCollider(hx, 22, hz, 26, 3.5, 34, 'Hangar Roof');
+
+  stuntZones.push({
+    pos: new THREE.Vector3(hx, 13.5, hz),
+    radius: 11.5,
+    label,
+    points: 300,
+    boostRefill: 30,
+    cooldown: 0
+  });
+}
+
+buildOpenHangar(46, -42, 'NORTH HANGAR THREAD! +300 (+30% BOOST)');
+buildOpenHangar(46, 38, 'SOUTH HANGAR THREAD! +300 (+30% BOOST)');
+
+// Fuel Storage Tanks & Parked Static Jets
+for (let i = 0; i < 3; i++) {
+  const tank = new THREE.Mesh(
+    new THREE.CylinderGeometry(5.2, 5.2, 10.5, 16),
+    i % 2 === 0 ? metalRedMat : concreteMat
+  );
+  tank.position.set(48, 11.5, -86 + i * 15);
+  worldGroup.add(tank);
+  addBoxCollider(48, 11.5, -86 + i * 15, 10.5, 10.5, 10.5, 'Fuel Tank');
+}
+
+[-26, -26].forEach((px, idx) => {
+  const pz = idx === 0 ? 14 : 82;
+  const jet = new THREE.Group();
+  jet.position.set(px, 7.6, pz);
+  jet.rotation.y = Math.PI * 0.38;
+  const fuse = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 13, 10), concreteMat);
+  fuse.rotation.x = Math.PI / 2;
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(1.2, 3.2, 10), metalRedMat);
+  nose.rotation.x = Math.PI / 2;
+  nose.position.z = 8.1;
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(14, 0.25, 3.0), metalRedMat);
+  const tail = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 2.0), metalRedMat);
+  tail.position.set(0, 1.7, -5.4);
+  jet.add(fuse, nose, wing, tail);
+  worldGroup.add(jet);
+});
+
+// --- B. Harbor Suspension Bridge (Connects Main Island to North Island) ---
+const bridgeGroup = new THREE.Group();
+const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(20, 2.2, 230), steelDarkMat);
+deckMesh.position.set(0, 22, -255);
+bridgeGroup.add(deckMesh);
+addBoxCollider(0, 22, -255, 20, 2.4, 230, 'Suspension Bridge Deck');
+
+[-205, -305].forEach((tz) => {
+  const towerL = new THREE.Mesh(new THREE.BoxGeometry(3.4, 66, 3.4), metalRedMat);
+  towerL.position.set(-10.5, 33, tz);
+  const towerR = new THREE.Mesh(new THREE.BoxGeometry(3.4, 66, 3.4), metalRedMat);
+  towerR.position.set(10.5, 33, tz);
+  const crossTop = new THREE.Mesh(new THREE.BoxGeometry(24, 3, 3.2), metalRedMat);
+  crossTop.position.set(0, 62, tz);
+  const crossMid = new THREE.Mesh(new THREE.BoxGeometry(24, 2.4, 3.0), metalRedMat);
+  crossMid.position.set(0, 42, tz);
+  const beaconTop = new THREE.Mesh(new THREE.SphereGeometry(1.2, 8, 8), new THREE.MeshBasicMaterial({ color: 0xff2a55 }));
+  beaconTop.position.set(0, 65, tz);
+  bridgeGroup.add(towerL, towerR, crossTop, crossMid, beaconTop);
+
+  addBoxCollider(-10.5, 33, tz, 3.6, 66, 3.6, 'Bridge Tower');
+  addBoxCollider(10.5, 33, tz, 3.6, 66, 3.6, 'Bridge Tower');
+});
+
+// Sweeping Bridge Suspension Cables
+[-10.5, 10.5].forEach((cx) => {
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(cx, 23, -145),
+    new THREE.Vector3(cx, 63, -205),
+    new THREE.Vector3(cx, 31, -255),
+    new THREE.Vector3(cx, 63, -305),
+    new THREE.Vector3(cx, 23, -365)
+  ]);
+  const cableMesh = new THREE.Mesh(
+    new THREE.TubeGeometry(curve, 32, 0.42, 6, false),
+    new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+  );
+  bridgeGroup.add(cableMesh);
+});
+worldGroup.add(bridgeGroup);
+
+stuntZones.push({
+  pos: new THREE.Vector3(0, 11.5, -255),
+  radius: 13.5,
+  label: 'BRIDGE UNDERPASS! +350 (+30% BOOST)',
+  points: 350,
+  boostRefill: 30,
+  cooldown: 0
+});
+
+// --- C. North Lighthouse Island ---
+const northSand = new THREE.Mesh(new THREE.CylinderGeometry(86, 102, 5, 24), sandMat);
+northSand.position.set(0, 2.2, -440);
+const northGrass = new THREE.Mesh(new THREE.CylinderGeometry(76, 84, 3.5, 24), grassMat);
+northGrass.position.set(0, 5.0, -440);
+const northCliff = new THREE.Mesh(new THREE.ConeGeometry(42, 34, 9), rockMat);
+northCliff.position.set(22, 20, -455);
+worldGroup.add(northSand, northGrass, northCliff);
+addBoxCollider(22, 18, -455, 48, 32, 48, 'North Island Cliff');
+
+// Striped Lighthouse + Rotating Light Beam
+const lhGroup = new THREE.Group();
+lhGroup.position.set(22, 36, -455);
+for (let s = 0; s < 5; s++) {
+  const seg = new THREE.Mesh(
+    new THREE.CylinderGeometry(3.6 - s * 0.28, 4.0 - s * 0.28, 5.5, 14),
+    s % 2 === 0 ? metalRedMat : concreteMat
+  );
+  seg.position.y = s * 5.5 + 2.75;
+  lhGroup.add(seg);
+}
+const lhLantern = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 2.6, 4.2, 12), new THREE.MeshBasicMaterial({ color: 0xfef08a }));
+lhLantern.position.y = 29.5;
+const lhCap = new THREE.Mesh(new THREE.ConeGeometry(3.3, 3.2, 12), metalRedMat);
+lhCap.position.y = 33.2;
+
+const lhSpinner = new THREE.Group();
+lhSpinner.position.y = 29.5;
+const beamGeo = new THREE.ConeGeometry(9, 85, 16, 1, true);
+beamGeo.translate(0, -42.5, 0);
+beamGeo.rotateX(Math.PI / 2);
+const beamMat = new THREE.MeshBasicMaterial({
+  color: 0xfef08a,
+  transparent: true,
+  opacity: 0.16,
+  side: THREE.DoubleSide,
+  depthWrite: false
+});
+const beam1 = new THREE.Mesh(beamGeo, beamMat);
+const beam2 = new THREE.Mesh(beamGeo, beamMat);
+beam2.rotation.y = Math.PI;
+lhSpinner.add(beam1, beam2);
+
+lhGroup.add(lhLantern, lhCap, lhSpinner);
+worldGroup.add(lhGroup);
+addBoxCollider(22, 51, -455, 8, 32, 8, 'Lighthouse Tower');
+
+// --- D. Offshore Aircraft Carrier ---
+const carrierGroup = new THREE.Group();
+carrierGroup.position.set(265, 0, -35);
+const cHull = new THREE.Mesh(new THREE.BoxGeometry(34, 14, 155), steelDarkMat);
+cHull.position.y = 6.5;
+const cDeck = new THREE.Mesh(
+  new THREE.BoxGeometry(40, 1.4, 164),
+  new THREE.MeshStandardMaterial({ map: createCarrierDeckTexture(), roughness: 0.7 })
+);
+cDeck.position.y = 14.2;
+const cIsland = new THREE.Mesh(new THREE.BoxGeometry(7.5, 16, 24), concreteMat);
+cIsland.position.set(14.5, 22, -12);
+const cRadar = new THREE.Mesh(new THREE.BoxGeometry(6, 1.5, 0.8), new THREE.MeshBasicMaterial({ color: 0x00f5ff }));
+cRadar.position.set(14.5, 31.5, -12);
+carrierGroup.add(cHull, cDeck, cIsland, cRadar);
+worldGroup.add(carrierGroup);
+addBoxCollider(265, 7.5, -35, 38, 14, 160, 'Aircraft Carrier Hull');
+addBoxCollider(279.5, 22, -47, 8, 16, 24, 'Carrier Island');
+
+stuntZones.push({
+  pos: new THREE.Vector3(265, 20, -35),
+  radius: 17,
+  label: 'CARRIER DECK BUZZ! +350 (+30% BOOST)',
+  points: 350,
+  boostRefill: 30,
+  cooldown: 0
+});
+
+// --- E. Harbor Boardwalk & Giant Rotating Ferris Wheel ---
+const boardwalk = new THREE.Mesh(
+  new THREE.BoxGeometry(36, 2.6, 66),
+  new THREE.MeshStandardMaterial({ color: 0x92400e, roughness: 0.85 })
+);
+boardwalk.position.set(-148, 4.4, 115);
+worldGroup.add(boardwalk);
+
+[0xf43f5e, 0x38bdf8, 0xfbbf24].forEach((col, i) => {
+  const stall = new THREE.Mesh(
+    new THREE.BoxGeometry(8, 5, 10),
+    new THREE.MeshStandardMaterial({ color: col, roughness: 0.45 })
+  );
+  stall.position.set(-138, 8.0, 95 + i * 18);
+  worldGroup.add(stall);
+});
+
+const ferrisBase = new THREE.Group();
+ferrisBase.position.set(-154, 5.7, 115);
+const legGeo = new THREE.CylinderGeometry(0.8, 1.2, 34, 8);
+[[-7, -8, -0.24], [7, -8, 0.24], [-7, 8, -0.24], [7, 8, 0.24]].forEach(([lx, lz, rz]) => {
+  const leg = new THREE.Mesh(legGeo, steelDarkMat);
+  leg.position.set(lx, 15, lz);
+  leg.rotation.z = rz;
+  ferrisBase.add(leg);
+});
+
+const ferrisWheelSpinner = new THREE.Group();
+ferrisWheelSpinner.position.set(0, 31, 0);
+const outerWheel = new THREE.Mesh(new THREE.TorusGeometry(24, 0.85, 10, 36), new THREE.MeshBasicMaterial({ color: 0xf43f5e }));
+const innerWheel = new THREE.Mesh(new THREE.TorusGeometry(15.5, 0.55, 8, 32), new THREE.MeshBasicMaterial({ color: 0x00f5ff }));
+ferrisWheelSpinner.add(outerWheel, innerWheel);
+
+for (let s = 0; s < 12; s++) {
+  const ang = (s / 12) * Math.PI * 2;
+  const spoke = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 48, 6), concreteMat);
+  spoke.rotation.z = ang;
+  const cabin = new THREE.Mesh(
+    new THREE.BoxGeometry(2.6, 2.4, 3.6),
+    new THREE.MeshBasicMaterial({ color: s % 2 === 0 ? 0xfbbf24 : 0x38bdf8 })
+  );
+  cabin.position.set(Math.cos(ang) * 24, Math.sin(ang) * 24, 0);
+  ferrisWheelSpinner.add(spoke, cabin);
+}
+ferrisBase.add(ferrisWheelSpinner);
+worldGroup.add(ferrisBase);
+
+stuntZones.push({
+  pos: new THREE.Vector3(-154, 36.7, 115),
+  radius: 15.5,
+  label: 'FERRIS WHEEL THREAD! +450 (+30% BOOST)',
+  points: 450,
+  boostRefill: 30,
+  cooldown: 0
+});
+
+// --- F. Volcanic Crater & Fly-Through Canyon Pass ---
+const volcanoGroup = new THREE.Group();
+volcanoGroup.position.set(-285, 0, -15);
+const vNorthPeak = new THREE.Mesh(new THREE.ConeGeometry(62, 132, 10), rockMat);
+vNorthPeak.position.set(0, 64, -50);
+const vSouthPeak = new THREE.Mesh(new THREE.ConeGeometry(58, 124, 10), rockMat);
+vSouthPeak.position.set(0, 60, 50);
+const vSaddle = new THREE.Mesh(new THREE.BoxGeometry(76, 20, 68), rockMat);
+vSaddle.position.set(0, 9, 0);
+const magmaPool = new THREE.Mesh(new THREE.CylinderGeometry(16, 12, 3, 16), new THREE.MeshBasicMaterial({ color: 0xff5500 }));
+magmaPool.position.set(0, 120, -50);
+volcanoGroup.add(vNorthPeak, vSouthPeak, vSaddle, magmaPool);
+worldGroup.add(volcanoGroup);
+
+addBoxCollider(-285, 64, -65, 66, 120, 66, 'Volcano North Peak');
+addBoxCollider(-285, 60, 35, 62, 112, 62, 'Volcano South Peak');
+addBoxCollider(-285, 9, -15, 76, 20, 68, 'Volcano Ridge');
+
+const emberGeo = new THREE.BoxGeometry(0.85, 0.85, 0.85);
+const emberMat = new THREE.MeshBasicMaterial({ color: 0xfbbf24 });
+for (let e = 0; e < 24; e++) {
+  const em = new THREE.Mesh(emberGeo, emberMat);
+  em.position.set(-285 + (Math.random() - 0.5) * 22, 122 + Math.random() * 48, -65 + (Math.random() - 0.5) * 22);
+  worldGroup.add(em);
+  lavaEmbers.push({ mesh: em, speed: 8 + Math.random() * 10 });
+}
+
+stuntZones.push({
+  pos: new THREE.Vector3(-285, 36, -15),
+  radius: 19,
+  label: 'VOLCANO CANYON PASS! +400 (+30% BOOST)',
+  points: 400,
+  boostRefill: 30,
+  cooldown: 0
+});
+
+// --- G. Natural Stone Sea Arches ---
+function buildSeaArch(ax, az, rotY, label) {
+  const archGroup = new THREE.Group();
+  archGroup.position.set(ax, 0, az);
+  archGroup.rotation.y = rotY;
+
+  const archMesh = new THREE.Mesh(
+    new THREE.TorusGeometry(26, 6.2, 8, 18, Math.PI),
+    rockMat
+  );
+  archMesh.position.y = 4;
+  archGroup.add(archMesh);
+  worldGroup.add(archGroup);
+
+  stuntZones.push({
+    pos: new THREE.Vector3(ax, 17, az),
+    radius: 17,
+    label,
+    points: 350,
+    boostRefill: 30,
+    cooldown: 0
+  });
+}
+
+buildSeaArch(0, 260, 0, 'SOUTH SEA ARCH THREAD! +350 (+30% BOOST)');
+buildSeaArch(-145, -180, 0.65, 'NORTHWEST ARCH THREAD! +350 (+30% BOOST)');
+buildSeaArch(165, 175, -0.55, 'SOUTHEAST ARCH THREAD! +350 (+30% BOOST)');
+
+// --- H. Cruising Zeppelin, Instanced Balloons, Wind Turbines, Seagulls, Palms & City ---
+const zeppelinGroup = new THREE.Group();
+zeppelinGroup.position.set(160, 138, -180);
+const zHull = new THREE.Mesh(new THREE.SphereGeometry(18, 20, 14), concreteMat);
+zHull.scale.set(1, 0.85, 3.2);
+const zStripe = new THREE.Mesh(
+  new THREE.CylinderGeometry(18.2, 18.2, 14, 20, 1, true),
+  new THREE.MeshBasicMaterial({ color: 0xe11d48, side: THREE.DoubleSide })
+);
+zStripe.rotation.x = Math.PI / 2;
+const zGondola = new THREE.Mesh(new THREE.BoxGeometry(6, 4.5, 22), steelDarkMat);
+zGondola.position.y = -16.5;
+const zBeacon = new THREE.Mesh(new THREE.SphereGeometry(1.6, 8, 8), new THREE.MeshBasicMaterial({ color: 0x00f5ff }));
+zBeacon.position.y = 16.2;
+zeppelinGroup.add(zHull, zStripe, zGondola, zBeacon);
+worldGroup.add(zeppelinGroup);
+
+// Instanced Hot Air Balloons (8)
+const balloonColors = [0xf43f5e, 0x38bdf8, 0xfbbf24, 0xa855f7, 0x10b981];
+const envGeo = new THREE.SphereGeometry(11, 14, 12);
+envGeo.scale(1, 1.25, 1);
+const balloonEnvInst = new THREE.InstancedMesh(envGeo, new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.45 }), 8);
+const balloonBasketInst = new THREE.InstancedMesh(new THREE.BoxGeometry(4.2, 3.2, 4.2), new THREE.MeshStandardMaterial({ color: 0x78350f }), 8);
+for (let i = 0; i < 8; i++) {
+  const ang = (i / 8) * Math.PI * 2;
+  const rad = 168 + (i % 2) * 110;
+  balloonData.push({
+    x: Math.cos(ang) * rad,
+    baseY: 66 + (i % 3) * 24,
+    z: Math.sin(ang) * rad,
+    phase: i * 1.15
+  });
+  balloonEnvInst.setColorAt(i, new THREE.Color(balloonColors[i % balloonColors.length]));
+}
+balloonEnvInst.instanceColor.needsUpdate = true;
+worldGroup.add(balloonEnvInst, balloonBasketInst);
+
+// Spinning Offshore Wind Turbines (4)
+[[-210, -290], [-165, -330], [180, -310], [225, -260]].forEach(([wx, wz]) => {
+  const mast = new THREE.Mesh(new THREE.CylinderGeometry(1.1, 2.0, 62, 10), concreteMat);
+  mast.position.set(wx, 31, wz);
+  const rotor = new THREE.Group();
+  rotor.position.set(wx, 61, wz + 1.5);
+  for (let b = 0; b < 3; b++) {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(1.4, 24, 0.35), concreteMat);
+    blade.position.y = 11;
+    const pivot = new THREE.Group();
+    pivot.rotation.z = (b / 3) * Math.PI * 2;
+    pivot.add(blade);
+    rotor.add(pivot);
+  }
+  worldGroup.add(mast, rotor);
+  windTurbineRotors.push(rotor);
+});
+
+// Floating Cyan Turbo Boost Gates (4)
+[
+  new THREE.Vector3(120, 44, -120),
+  new THREE.Vector3(-125, 48, -60),
+  new THREE.Vector3(115, 42, 110),
+  new THREE.Vector3(-110, 52, -310)
+].forEach((pos) => {
+  const gateMesh = new THREE.Mesh(
+    new THREE.TorusGeometry(13, 0.85, 10, 28),
+    new THREE.MeshBasicMaterial({ color: 0x00f5ff })
+  );
+  gateMesh.position.copy(pos);
+  gateMesh.lookAt(0, pos.y, 0);
+  worldGroup.add(gateMesh);
+  boostGates.push({ mesh: gateMesh, pos, cooldown: 0 });
+});
+
+// Instanced Harbor City Buildings (28)
+const buildingTex = createBuildingTexture();
+const cityMat = new THREE.MeshStandardMaterial({
+  map: buildingTex,
+  emissiveMap: buildingTex,
+  emissive: new THREE.Color(0xfef08a),
+  emissiveIntensity: 0.25,
+  roughness: 0.5
+});
+const cityInst = new THREE.InstancedMesh(new THREE.BoxGeometry(1, 1, 1), cityMat, 28);
+let cIdx = 0;
+for (let i = 0; i < 28; i++) {
+  const ang = (i / 28) * Math.PI * 1.45 + 0.55;
+  const rad = 86 + (i % 4) * 14;
+  const bx = Math.cos(ang) * rad;
+  const bz = Math.sin(ang) * rad;
+  // Keep clear of runway & hangars
+  if (Math.abs(bx) < 68 && Math.abs(bz) < 132) continue;
+  const h = 14 + (i % 5) * 8;
+  const w = 10 + (i % 3) * 3;
+  dummy.position.set(bx, 6.2 + h * 0.5, bz);
+  dummy.rotation.set(0, ang, 0);
+  dummy.scale.set(w, h, w);
+  dummy.updateMatrix();
+  cityInst.setMatrixAt(cIdx++, dummy.matrix);
+  addBoxCollider(bx, 6.2 + h * 0.5, bz, w, h, w, 'City Tower');
+}
+cityInst.count = cIdx;
+worldGroup.add(cityInst);
+
+// Instanced Palm Trees (70)
+const trunkInst = new THREE.InstancedMesh(
+  new THREE.CylinderGeometry(0.45, 0.75, 10, 6),
+  new THREE.MeshStandardMaterial({ color: 0x78350f, roughness: 0.9 }),
+  70
+);
+const frondsInst = new THREE.InstancedMesh(
+  new THREE.ConeGeometry(4.2, 3.2, 7),
+  new THREE.MeshStandardMaterial({ color: 0x22c55e, roughness: 0.75 }),
+  70
+);
+let pIdx = 0;
+for (let i = 0; i < 95 && pIdx < 70; i++) {
+  const isNorth = i > 65;
+  const ang = i * 2.39996;
+  const rad = isNorth ? 28 + (i % 4) * 12 : 76 + (i % 6) * 11;
+  const px = Math.cos(ang) * rad;
+  const pz = (isNorth ? -440 : 0) + Math.sin(ang) * rad;
+  if (!isNorth && Math.abs(px) < 64 && Math.abs(pz) < 130) continue;
+  const sc = 0.85 + (i % 4) * 0.18;
+  dummy.position.set(px, 6.2 + 5 * sc, pz);
+  dummy.rotation.set(0, ang, 0);
+  dummy.scale.setScalar(sc);
+  dummy.updateMatrix();
+  trunkInst.setMatrixAt(pIdx, dummy.matrix);
+
+  dummy.position.set(px, 6.2 + 10.2 * sc, pz);
+  dummy.updateMatrix();
+  frondsInst.setMatrixAt(pIdx++, dummy.matrix);
+}
+trunkInst.count = pIdx;
+frondsInst.count = pIdx;
+worldGroup.add(trunkInst, frondsInst);
+
+// Instanced Flocks of Wing-Flapping Seagulls (36)
+const gullCount = 36;
+const gullUniform = { uTime: { value: 0 } };
+const gullMat = new THREE.MeshBasicMaterial({ color: 0xf8fafc, side: THREE.DoubleSide });
+gullMat.onBeforeCompile = (shader) => {
+  shader.uniforms.uTime = gullUniform.uTime;
+  shader.vertexShader = `uniform float uTime;\n` + shader.vertexShader;
+  shader.vertexShader = shader.vertexShader.replace(
+    '#include <begin_vertex>',
+    `#include <begin_vertex>
+    float flap = sin(uTime * 11.0 + float(gl_InstanceID) * 1.7) * 0.65;
+    transformed.y += abs(transformed.x) * flap;`
+  );
+};
+const seagullInst = new THREE.InstancedMesh(new THREE.PlaneGeometry(3.4, 0.9, 2, 1), gullMat, gullCount);
+for (let g = 0; g < gullCount; g++) {
+  const center = g < 18 ? new THREE.Vector3(-135, 42, -155) : new THREE.Vector3(155, 46, 145);
+  seagullData.push({
+    center,
+    radius: 26 + (g % 6) * 8,
+    speed: 0.45 + (g % 5) * 0.08,
+    phase: (g / gullCount) * Math.PI * 2,
+    yOff: (g % 4) * 3.5
+  });
+}
+worldGroup.add(seagullInst);
+
+// HORIZON EXPANSION — seven hand-placed procedural regions with local terrain variation.
+const MAP_CX=0,MAP_CZ=485,MAP_RADIUS=1770,FLIGHT_CEILING=405;
+const horizonIslands=[
+ {name:'Glasswater City',x:605,z:-100,rx:300,rz:320,biome:'city',seed:11,desc:'Skyscraper alleys · canal bridges · rooftop gardens'},
+ {name:'Commonwealth Campus',x:825,z:505,rx:283,rz:285,biome:'campus',seed:21,desc:'CDS · Marsh Chapel · Bay State brownstones'},
+ {name:'Glacier Crown',x:575,z:1075,rx:310,rz:315,biome:'alpine',seed:31,desc:'Snow peaks · alpine village · observatory'},
+ {name:'Copper Canyon',x:0,z:1325,rx:245,rz:250,biome:'desert',seed:41,desc:'Red mesas · ravines · mining outpost'},
+ {name:'Palm Coast',x:-565,z:1075,rx:305,rz:310,biome:'tropical',seed:51,desc:'Beach villas · tropical hills · coastal paths'},
+ {name:'Iron Harbor',x:-825,z:505,rx:285,rz:290,biome:'harbor',seed:61,desc:'Cargo cranes · container yards · ship docks'},
+ {name:'Emerald Highlands',x:-615,z:-105,rx:300,rz:315,biome:'forest',seed:71,desc:'Forest ridges · observatory · hillside cabins'},
+ {name:'South Windsor',x:505,z:-735,rx:238,rz:238,biome:'suburb',seed:81,desc:'Bobcat high school · town green · farms · New England homes'},
+ {name:'Manhattan',x:1218,z:-20,rx:260,rz:245,biome:'metro',seed:91,desc:'Empire State · Chrysler · One World Trade · Central Park'},
+ {name:'Crystal City',x:1218,z:990,rx:248,rz:255,biome:'crystal',seed:101,desc:'All-glass skyline · skybridges · crystalline spires'},
+ {name:'Paris',x:505,z:1705,rx:245,rz:238,biome:'heritage',seed:111,desc:'Eiffel Tower · Arc de Triomphe · Louvre pyramid'},
+ {name:'London',x:-505,z:1705,rx:245,rz:238,biome:'heritage',seed:121,desc:'Big Ben · Tower Bridge · red buses'},
+ {name:'Tokyo',x:-1218,z:990,rx:250,rz:245,biome:'metro',seed:131,desc:'Tokyo Tower · Shibuya crossing · pagoda'},
+ {name:'Dubai',x:-1218,z:-20,rx:248,rz:245,biome:'gold',seed:141,desc:'Burj Khalifa · sail-shaped hotel · palm promenade'},
+ {name:'San Francisco',x:-505,z:-735,rx:238,rz:238,biome:'suburb',seed:151,desc:'Golden Gate-inspired bridge · painted houses · Transamerica'}
+];
+const airportPOI={name:'Ace Airfield',x:0,z:-120,rx:330,rz:400,biome:'airport',desc:'Airport · carrier · volcano · amusement pier'};
+const allPOIs=[airportPOI,...horizonIslands];
+function mapDistance(x,z){return Math.hypot(x-MAP_CX,z-MAP_CZ);}
+function getPOI(x,z){let best=null,score=1.04;for(const a of allPOIs){const d=Math.hypot((x-a.x)/a.rx,(z-a.z)/a.rz);if(d<score){best=a;score=d;}}return best;}
+function seeded(seed){return ()=>{seed|=0;seed=seed+0x6D2B79F5|0;let t=Math.imul(seed^seed>>>15,1|seed);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296;};}
+function islandHeight(a,x,z){const u=(x-a.x)/a.rx,v=(z-a.z)/a.rz;const r=Math.hypot(u,v);if(r>1.15)return -8;const theta=Math.atan2(v,u);const coast=1+.045*Math.sin(theta*5+a.seed)+.038*Math.cos(theta*9-a.seed);const f=THREE.MathUtils.smoothstep(coast-r,0,.20);let h=-7+16*f;
+ if(['campus','harbor','suburb','metro','crystal','heritage','gold'].includes(a.biome)){return h;}
+ if(a.biome==='city'){const canal=1-THREE.MathUtils.smoothstep(Math.abs(x-a.x-22*Math.sin(v*3)),16,42);h-=canal*17*f;}
+ else{const peaks=(Math.exp(-((u+.27)**2*8+(v+.20)**2*14))*.92+Math.exp(-((u-.31)**2*13+(v-.15)**2*9))*.85+Math.exp(-((u+.10)**2*18+(v-.45)**2*16))*.62);const detail=.70+.21*Math.sin(u*24+Math.sin(v*12)+a.seed)*Math.cos(v*17)+.09*Math.sin(u*55+v*39);let mountain=peaks*detail*f;
+ if(a.biome==='alpine')h+=mountain*320;else if(a.biome==='forest')h+=mountain*155;else if(a.biome==='desert'){let mesa=Math.min(1,mountain*2.8);mesa=Math.pow(mesa,.65);const trench=THREE.MathUtils.smoothstep(Math.abs(v-.15*Math.sin(u*5)),.045,.19);h+=mesa*125*trench*f;}else h+=mountain*100;}
+ return h;}
+function worldHeight(x,z){let h=0;if(Math.hypot(x,z)<155)h=6.4;if(Math.hypot(x,z+440)<89)h=6.5;for(const a of horizonIslands){if(Math.abs(x-a.x)<a.rx*1.2&&Math.abs(z-a.z)<a.rz*1.2)h=Math.max(h,islandHeight(a,x,z));}return h;}
+const terrainMat=new THREE.MeshStandardMaterial({vertexColors:true,roughness:1,flatShading:false});
+const colSand=new THREE.Color(0xe4c58c),colGrass=new THREE.Color(0x629c56),colDark=new THREE.Color(0x315d49),colRock=new THREE.Color(0x777b86),colSnow=new THREE.Color(0xeaf5ff),colMesa=new THREE.Color(0xb66a43),colDeep=new THREE.Color(0x2e6d71);
+for(const a of horizonIslands){const geo=new THREE.PlaneGeometry(a.rx*2.32,a.rz*2.32,126,126);geo.rotateX(-Math.PI/2);const pos=geo.attributes.position,colors=[];for(let i=0;i<pos.count;i++){const x=pos.getX(i)+a.x,z=pos.getZ(i)+a.z,h=islandHeight(a,x,z);pos.setY(i,h);let c=colSand.clone();if(h<1)c.lerp(colDeep,THREE.MathUtils.clamp((1-h)/10,0,1));else if(a.biome==='desert')c.lerp(colMesa,THREE.MathUtils.smoothstep(h,5,65)).multiplyScalar(.91+.10*Math.sin(h*.19));else{c.lerp(colGrass,THREE.MathUtils.smoothstep(h,2,15));if(a.biome==='alpine'){c.lerp(colDark,THREE.MathUtils.smoothstep(h,40,90));c.lerp(colRock,THREE.MathUtils.smoothstep(h,95,185));c.lerp(colSnow,THREE.MathUtils.smoothstep(h,185,255));}else c.lerp(colDark,THREE.MathUtils.smoothstep(h,30,75));}c.multiplyScalar(.91+.10*Math.sin(x*.08+z*.06)+.04*Math.cos(z*.19));colors.push(c.r,c.g,c.b);}geo.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));geo.computeVertexNormals();const mesh=new THREE.Mesh(geo,terrainMat);mesh.position.set(a.x,0,a.z);worldGroup.add(mesh);}
+const waterIslandData=[{x:0,z:0,rx:155,rz:155},{x:0,z:-440,rx:90,rz:90},...horizonIslands];waterIslandData.forEach((a,i)=>oceanUniforms.uIslands.value[i].set(a.x,a.z,a.rx,a.rz));
+// Procedural high-resolution sky reflection probe (no external texture downloads).
+const envCanvas=document.createElement('canvas');envCanvas.width=1024;envCanvas.height=512;const envCtx=envCanvas.getContext('2d');const envGrad=envCtx.createLinearGradient(0,0,0,512);envGrad.addColorStop(0,'#2b649c');envGrad.addColorStop(.46,'#d3efff');envGrad.addColorStop(.51,'#a5c9d5');envGrad.addColorStop(1,'#28475b');envCtx.fillStyle=envGrad;envCtx.fillRect(0,0,1024,512);const envGlow=envCtx.createRadialGradient(220,145,2,220,145,95);envGlow.addColorStop(0,'#fffbe8');envGlow.addColorStop(1,'rgba(255,255,255,0)');envCtx.fillStyle=envGlow;envCtx.fillRect(100,25,240,240);const envTex=new THREE.CanvasTexture(envCanvas);envTex.colorSpace=THREE.SRGBColorSpace;envTex.mapping=THREE.EquirectangularReflectionMapping;scene.environment=envTex;
+// Batching hundreds of architectural / vegetation details by shared geometry and material.
+const batches=new Map();const boxUnit=new THREE.BoxGeometry(1,1,1),coneUnit=new THREE.ConeGeometry(1,1,7),cylUnit=new THREE.CylinderGeometry(1,1,1,7),roofUnit=new THREE.CylinderGeometry(0,1,1,4,1);const batchMats={road:new THREE.MeshStandardMaterial({color:0x313c46,roughness:.95}),house:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.85}),roof:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.8}),tree:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.95}),tower:new THREE.MeshStandardMaterial({map:buildingTex,color:0xffffff,emissiveMap:buildingTex,emissive:0xc6edff,emissiveIntensity:.12,roughness:.42,metalness:.13}),glass:new THREE.MeshStandardMaterial({map:buildingTex,color:0x80c6db,roughness:.16,metalness:.70,envMapIntensity:1.15}),light:new THREE.MeshBasicMaterial({color:0xffffff}),concrete:new THREE.MeshStandardMaterial({color:0xffffff,roughness:.85})};
+function batchPart(type,geo,x,y,z,sx,sy,sz,color=0xffffff,rot=0){const key=type+geo.uuid;if(!batches.has(key))batches.set(key,{geo,mat:batchMats[type],parts:[]});batches.get(key).parts.push({x,y,z,sx,sy,sz,color,rot});}
+function road(x,z,w,l,y=9.25){batchPart('road',boxUnit,x,y,z,w,.18,l);}
+function house(x,z,y,rng){const w=9+rng()*5,l=10+rng()*6,h=5+rng()*5;batchPart('house',boxUnit,x,y+h/2,z,w,h,l,[0xe6d6ba,0xf4e9dd,0xc3dbe4,0xd7a896,0xe9c68c][Math.floor(rng()*5)]);batchPart('roof',roofUnit,x,y+h+2,z,w*.75,4,l*.75,[0xa24c36,0x42505e,0x82564b][Math.floor(rng()*3)],Math.PI/4);batchPart('light',boxUnit,x,y+2.6,z-l/2-.03,1.5,1.3,.1,0x7399ae);addBoxCollider(x,y+h/2,z,w,h+1,l,'Coastal house');}
+function tree(x,z,y,rng,pine=false){const h=5+rng()*11;addBoxCollider(x,y+h*.32,z,1.1,h*.64,1.1,'Tree trunk');batchPart('concrete',cylUnit,x,y+h*.29,z,.48,h*.58,.48,0x74553c);batchPart('tree',coneUnit,x,y+h*.7,z,h*(pine?.29:.37),h*.76,h*(pine?.29:.37),pine?0x2f654c:0x4c9a59);if(pine)batchPart('tree',coneUnit,x,y+h*.94,z,h*.20,h*.5,h*.20,0x497b55);}
+const metropolis=horizonIslands[0];const rngCity=seeded(192);
+// City has two banks, gridded streets, parks, mixed-height towers, low-rise homes and canal bridges.
+for(let ix=-5;ix<=5;ix++)for(let iz=-5;iz<=5;iz++){const x=metropolis.x+ix*49,z=metropolis.z+iz*49;const y=islandHeight(metropolis,x,z);if(y<8.6||Math.hypot((x-metropolis.x)/metropolis.rx,(z-metropolis.z)/metropolis.rz)>.79)continue;
+ if(islandHeight(metropolis,x+24,z)>8.4&&islandHeight(metropolis,x-24,z)>8.4)road(x,z-21,49,6);if(islandHeight(metropolis,x,z+24)>8.4&&islandHeight(metropolis,x,z-24)>8.4)road(x-21,z,6,49);
+ const central=Math.abs(ix)<5&&Math.abs(iz)<5;const park=rngCity()<.12;
+ if(park){batchPart('tree',boxUnit,x,9.16,z,30,.15,30,0x6e9e60);for(let n=0;n<6;n++)tree(x+(rngCity()-.5)*22,z+(rngCity()-.5)*22,y,rngCity);}
+ else if(central&&rngCity()>.18){const w=17+rngCity()*12,h=28+rngCity()*88+((ix===2&&iz===0)?75:0),l=17+rngCity()*11;const type=rngCity()>.5?'tower':'glass';batchPart(type,boxUnit,x,y+h/2,z,w,h,l,[0x8fbbcc,0xd5e3ee,0xa4bec9,0x9bb9d1][Math.floor(rngCity()*4)]);batchPart('concrete',boxUnit,x,y+h+.9,z,w*.76,1.8,l*.76,0xb6c3c9);batchPart('light',boxUnit,x,y+h+2,z,1.1,1.1,1.1,0xff5348);if(h>90){batchPart('concrete',cylUnit,x,y+h+5,z,.4,8,.4,0x657681);if((ix+iz)%3===0){batchPart('glass',boxUnit,x,y+h+7,z,w*.55,13,l*.55,0xc7e0eb);batchPart('concrete',boxUnit,x,y+h+14,z,w*.6,1,l*.6,0xe4ddd2);addBoxCollider(x,y+h+7,z,w*.6,15,l*.6,'Tower crown');}}else if((ix+iz)%3===0){batchPart('tree',boxUnit,x,y+h+1.1,z,w*.72,.4,l*.72,0x6e9b67);}addBoxCollider(x,y+h/2,z,w,h+2,l,'Skyline tower');}
+ else{for(let j=0;j<3;j++){const xx=x+(j%2)*15-8,zz=z+Math.floor(j/2)*17-7;if(islandHeight(metropolis,xx,zz)>8)house(xx,zz,y,rngCity);}}
+}
+for(const dz of [-140,0,140]){const z=metropolis.z+dz,xx=metropolis.x+22*Math.sin(dz/metropolis.rz*3);road(xx,z,110,15,13);addBoxCollider(xx,13,z,110,.7,15,'Canal bridge');for(const off of [-5.5,5.5]){batchPart('concrete',boxUnit,xx,14.2,z+off,110,.5,.45,0xb7c7c8);for(let k=-2;k<=2;k++)batchPart('light',boxUnit,xx+k*20,14.7,z+off,.7,1,.7,0xffdb9e);}}
+// Outer coastal villages, pine forests and sparse desert scrub.
+for(const a of horizonIslands.slice(1)){const rng=seeded(a.seed);for(let i=0;i<430;i++){const x=a.x+(rng()-.5)*a.rx*1.95,z=a.z+(rng()-.5)*a.rz*1.95,h=islandHeight(a,x,z);if(h<6||h>175)continue;if((a.biome==='alpine'||a.biome==='forest')&&h<145&&rng()<.76)tree(x,z,h,rng,true);else if(a.biome==='tropical'&&rng()<.70)tree(x,z,h,rng);else if(a.biome==='desert'&&rng()<.25){batchPart('tree',coneUnit,x,h+1.1,z,1.8,2.2,1.8,0x929b60);} }
+ if(a.biome==='tropical'){for(let ix=-3;ix<=3;ix++)for(let iz=-2;iz<=2;iz++){const x=a.x+ix*19,z=a.z+a.rz*.58+iz*23,h=islandHeight(a,x,z);if(h>5&&h<26)house(x,z,h,rng);}}
+}
+
+// Hand-built landmarks and dense themed neighborhoods. All major solid parts register collisions.
+function part(type,x,y,z,w,h,l,color,name,rot=0,geo=boxUnit){batchPart(type,geo,x,y,z,w,h,l,color,rot);if(name){const c=Math.abs(Math.cos(rot)),t=Math.abs(Math.sin(rot));addBoxCollider(x,y,z,w*c+l*t,h,w*t+l*c,name);}}
+function sign(text,x,y,z,w=36,h=8,color='#bb1833'){
+ const c=document.createElement('canvas');c.width=512;c.height=128;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,512,128);ctx.fillStyle='#fff';ctx.font='bold 48px Arial';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(text,256,64,480);const tex=new THREE.CanvasTexture(c);tex.colorSpace=THREE.SRGBColorSpace;const m=new THREE.Mesh(new THREE.PlaneGeometry(w,h),new THREE.MeshBasicMaterial({map:tex,side:THREE.DoubleSide}));m.position.set(x,y,z);worldGroup.add(m);
+}
+const campus=horizonIslands[1],bx=campus.x,bz=campus.z;
+// Commonwealth Avenue and a parallel riverside promenade, with alternating brick buildings.
+for(const dz of [-95,0,100])road(bx,bz+dz,385,12);
+for(const dx of [-152,0,152])road(bx+dx,bz,10,360);
+const cdsX=bx+62,cdsZ=bz-55;
+part('concrete',cdsX,13,cdsZ,54,8,48,0x9a9d9a,'CDS podium');
+part('glass',cdsX,54,cdsZ,23,82,23,0xc3dbe4,'CDS central core');
+const cdsLevels=[[-9,0,42,34],[-12,7,40,35],[2,12,44,34],[12,2,42,36],[5,-12,42,35],[-8,-8,39,35],[5,3,31,28]];
+cdsLevels.forEach(([dx,dz,w,l],i)=>{const y=22+i*10.6,x=cdsX+dx,z=cdsZ+dz;part('glass',x,y,z,w,10.4,l,0xacc4d5,'CDS cantilever');part('concrete',x,y+5.3,z,w+.6,.75,l+.6,0xc3c8c9,'CDS terrace');for(let k=-w/2+2;k<w/2;k+=3.1)part('concrete',x+k,y,z-l/2-.08,.43,10.3,.25,0x777e85);for(let k=-l/2+2;k<l/2;k+=3.1)part('concrete',x+w/2+.08,y,z+k,.25,10.3,.43,i%2?0x925c4d:0x78858f);});
+sign('BOSTON UNIVERSITY',cdsX,17,cdsZ-24.2,40,5);
+// Marsh Chapel: collegiate Gothic stone, steep slate roof, tower, pointed windows.
+const mx=bx-65,mz=bz-50;
+part('concrete',mx,20,mz,34,22,48,0xb9b2a1,'Marsh Chapel nave');
+part('roof',mx,35,mz,24,15,34,0x46505a,'Chapel roof',Math.PI/4,roofUnit);
+part('concrete',mx,28,mz-24,15,38,15,0xbcb5a6,'Marsh Chapel tower');
+for(const dx of [-6,6])for(const dz of [-6,6]){part('concrete',mx+dx,50,mz-24+dz,2.3,9,2.3,0xb9b1a0,'Chapel pinnacle');part('roof',mx+dx,56,mz-24+dz,2,5,2,0x686f75,null,0,coneUnit);}
+for(let dz=-16;dz<=16;dz+=8){part('glass',mx-17.1,23,mz+dz,.2,10,3.2,0x9bc6de);part('glass',mx+17.1,23,mz+dz,.2,10,3.2,0x9bc6de);}
+sign('MARSH CHAPEL',mx,14,mz-32,15,3,'#565953');
+// Bay State Road, three Warren-inspired residence towers, red-and-white athletics field.
+for(let i=0;i<11;i++){const x=bx-115+i*22,z=bz+42;part('concrete',x,19,z,18,20+(i%3)*2,22,0x945a43,'Bay State brownstone');part('roof',x,31,z,13,6,16,0x514b4a,null,Math.PI/4,roofUnit);for(let j=0;j<3;j++){part('glass',x-5+j*5,19,z-11.05,2.2,10,.15,0x9cbbc9);}}
+for(let i=0;i<3;i++){const x=bx+77+i*31,z=bz+151;part('tower',x,39,z,23,60,31,0xa77b68,'Warren residence tower');part('concrete',x,70,z,24,2,32,0x6c7478,'Residence roof');}
+part('tree',bx-85,9.2,bz+151,83,.28,53,0x477f4c);for(const dz of [-26,26])part('light',bx-85,9.4,bz+151+dz,83,.12,.5,0xf5f1dc);for(let i=-3;i<=3;i++)part('light',bx-85+i*12,9.4,bz+151,.35,.12,52,0xe4eadc);part('concrete',bx-85,14,bz+185,82,9,10,0xc2c3bf,'Athletics bleachers');
+const campusR=seeded(414);for(let i=0;i<42;i++){let x=bx+(i%14-6.5)*22,z=bz+[-105,10,95][Math.floor(i/14)];if(islandHeight(campus,x,z)>8)tree(x,z,9,campusR);}
+// Industrial harbor: cranes, stacked containers, warehouse sheds and tank farm.
+const harbor=horizonIslands[5],hx=harbor.x,hz=harbor.z;
+for(const dz of [-100,0,100])road(hx,hz+dz,380,12);for(const dx of [-120,0,120])road(hx+dx,hz,12,360);
+for(let i=0;i<4;i++){let z=hz-125+i*75,x=hx+112;part('concrete',x,14,z,52,10,45,0xb1afa6,'Cargo shed');part('roof',x,22,z,37,6,32,0x536875,'Warehouse roof',Math.PI/4,roofUnit);}
+const contColors=[0xbe4c38,0x385d76,0xd9a43d,0x507f68,0x87959e];for(let i=0;i<5;i++)for(let j=0;j<6;j++){let x=hx-140+i*26,z=hz-120+j*39;for(let k=0;k<1+(i+j)%3;k++)part('concrete',x,11+k*4,z,11,4,25,contColors[(i+j+k)%5],'Shipping container');}
+for(let i=0;i<3;i++){const x=hx+50,z=hz-120+i*100;for(const dz of [-10,10])part('concrete',x,37,z+dz,5,56,5,0xd29b29,'Dock crane leg');part('concrete',x+27,65,z,66,4,6,0xdba533,'Dock crane boom');part('concrete',x+53,52,z,1,23,1,0x535b60,'Crane cable');part('concrete',x+53,39,z,9,4,9,0x5c6872,'Crane spreader');}
+for(let i=0;i<4;i++){const x=hx-135+i*32,z=hz+144;part('concrete',x,19,z,12,20,12,0xc5c9c7,'Fuel tank',0,cylUnit);}
+// Resort boardwalk and varied villa blocks on the flatter coast.
+const resort=horizonIslands[4],rr=seeded(513);for(let i=0;i<46;i++){const a=i*.45,r=.60+.13*Math.sin(i*2.1),x=resort.x+Math.cos(a)*resort.rx*r,z=resort.z+Math.sin(a)*resort.rz*r,y=islandHeight(resort,x,z);if(y>7&&y<38)house(x,z,y,rr);}
+// Alpine and forest villages, terraced lodges and a high observatory.
+for(const a of [horizonIslands[2],horizonIslands[6]]){const rng=seeded(a.seed+77);for(let i=0;i<100;i++){const x=a.x+(rng()-.5)*a.rx*1.65,z=a.z+(rng()-.5)*a.rz*1.65,y=islandHeight(a,x,z);if(y>8&&y<42&&i%3===0)house(x,z,y,rng);}const x=a.x+30,z=a.z+22,y=islandHeight(a,x,z);part('concrete',x,y+7,z,25,14,25,0xd6d9d9,'Mountain observatory');part('glass',x,y+15,z,12,7,12,0xb2d1e3,'Observatory dome',0,cylUnit);}
+const canyon=horizonIslands[3],mr=seeded(833);for(let i=0;i<34;i++){const x=canyon.x+(mr()-.5)*canyon.rx*1.5,z=canyon.z+(mr()-.5)*canyon.rz*1.5,y=islandHeight(canyon,x,z);if(y>8&&y<35){part('concrete',x,y+3,z,10,6,12,0xc49b78,'Mining outpost');part('roof',x,y+7,z,8,3,8,0x795644,null,Math.PI/4,roofUnit);}}
+// Connect selected neighbors via arched-looking truss crossings; leave the lagoon open.
+function channelBridge(a,b){const dx=b.x-a.x,dz=b.z-a.z,dist=Math.hypot(dx,dz),ux=dx/dist,uz=dz/dist;const edge=(o)=>1/Math.hypot(ux/o.rx,uz/o.rz);const start=edge(a)-30,end=dist-edge(b)+30;if(end-start<28)return;const l=end-start,x=a.x+ux*(start+end)/2,z=a.z+uz*(start+end)/2,rot=Math.atan2(ux,uz);part('road',x,13,z,10,1.3,l,0x444b53,null,rot);for(const side of [-1,1])part('concrete',x+uz*side*4.8,15,z-ux*side*4.8,.5,2.8,l,0xb7c3c9,null,rot);for(let t=start+9;t<end;t+=24){for(const side of [-1,1])part('concrete',a.x+ux*t+uz*side*3.7,6.5,a.z+uz*t-ux*side*3.7,2.2,13,2.2,0x98a4aa,'Bridge pier');} // subdivide deck collision to avoid a huge diagonal AABB
+for(let t=start;t<end;t+=8){const seg=Math.min(8,end-t),xx=a.x+ux*(t+seg/2),zz=a.z+uz*(t+seg/2);addBoxCollider(xx,13.5,zz,10*Math.abs(uz)+seg*Math.abs(ux),4,10*Math.abs(ux)+seg*Math.abs(uz),'Channel bridge');}}
+channelBridge(horizonIslands[0],campus);channelBridge(horizonIslands[4],harbor);channelBridge(horizonIslands[2],canyon);
+
+// WORLD ATLAS: eight new districts, original hand-built landmark silhouettes.
+const atlas=horizonIslands.slice(7);
+const [sw,ny,crystal,paris,london,tokyo,dubai,sf]=atlas;
+const ballUnit=new THREE.SphereGeometry(.5,16,12);
+const octUnit=new THREE.CylinderGeometry(.5,.5,1,8);
+const needleUnit=new THREE.ConeGeometry(.5,1,12);
+function block(a,dx,dz,w,h,l,col,name,type='concrete',base=9){part(type,a.x+dx,base+h/2,a.z+dz,w,h,l,col,name);}
+function localRoad(a,dx,dz,w,l){road(a.x+dx,a.z+dz,w,l);const along=w>l;const n=Math.floor(Math.max(w,l)/12);for(let i=0;i<n;i++){let t=(i-(n-1)/2)*12;part('light',a.x+dx+(along?t:0),9.39,a.z+dz+(along?0:t),along?5:.25,.025,along?.25:5,0xf5e7ba);}}
+function atlasTree(a,dx,dz,r){const x=a.x+dx,z=a.z+dz,h=islandHeight(a,x,z);if(h>6)tree(x,z,h,r);}
+function beamBetween(a,b,w,color,name){const v=new THREE.Vector3().subVectors(b,a),m=new THREE.Mesh(new THREE.BoxGeometry(w,v.length(),w),new THREE.MeshStandardMaterial({color,roughness:.62,metalness:.35}));m.position.copy(a).add(b).multiplyScalar(.5);m.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),v.normalize());worldGroup.add(m);if(name){const box=new THREE.Box3().setFromObject(m);registerAtlasCollider(box,name);}}
+function registerAtlasCollider(b,name){const c=b.getCenter(new THREE.Vector3()),d=b.getSize(new THREE.Vector3());addBoxCollider(c.x,c.y,c.z,d.x,d.y,d.z,name);}
+function tower(a,dx,dz,w,h,l,c=0xb5c3c9,type='tower'){block(a,dx,dz,w,h,l,c,'Office tower',type);block(a,dx,dz,w*.68,2,l*.68,0xd7d9d6,'Roof mechanical level','concrete',9+h);if(h>55)block(a,dx,dz,.7,4,.7,0xef4444,null,'light',11+h);}
+function atlasNeighborhood(a,skip,type='tower'){const r=seeded(a.seed*17);for(let ix=-3;ix<=3;ix++)for(let iz=-3;iz<=3;iz++){const dx=ix*48,dz=iz*48;if(Math.hypot(dx/a.rx,dz/a.rz)>.77||skip(dx,dz))continue;let h=20+r()*75,w=17+r()*12,l=17+r()*12;if(r()<.19){for(let j=0;j<4;j++)atlasTree(a,dx+(r()-.5)*25,dz+(r()-.5)*25,r);}else tower(a,dx,dz,w,h,l,[0xbecdd2,0x93afbc,0xc2b6a4,0x8b9ead][Math.floor(r()*4)],type);}}
+for(const a of atlas){for(const q of [-120,0,120]){localRoad(a,q,0,8,345);localRoad(a,0,q,345,8);}const r=seeded(a.seed);for(let i=0;i<38;i++){let ang=i*2.39996,rad=.70+.12*r();atlasTree(a,Math.cos(ang)*a.rx*rad,Math.sin(ang)*a.rz*rad,r);}}
+// SOUTH WINDSOR: stylized school campus, track, athletic fields, homes, farms, town green.
+block(sw,-62,-62,82,11,40,0xa4775d,'Bobcat high school');block(sw,-62,-31,80,9,22,0xb9a48e,'School classroom wing');block(sw,-112,-52,27,17,37,0x9b786a,'School gym');sign('SOUTH WINDSOR HIGH SCHOOL',sw.x-62,17,sw.z-82.1,69,5,'#653b28');
+for(let j=0;j<13;j++)part('glass',sw.x-97+j*5.8,15,sw.z-82.15,3.6,4,.2,0xa1cedc);
+block(sw,-65,64,94,.25,64,0x426d3c,null,'tree');block(sw,-65,64,108,.14,78,0x9d5045,null,'concrete',8.99);block(sw,-65,64,88,.2,57,0x588a45,null,'tree',9.15);for(let i=-4;i<=4;i++)block(sw,-65+i*9,64,.23,.04,55,0xffffff,null,'light',9.36);sign('BOBCATS',sw.x-65,12,sw.z+103,25,3,'#68402e');
+const swr=seeded(147);for(let i=0;i<6;i++)for(let j=0;j<5;j++){let x=26+i*23,z=-100+j*36;if(Math.hypot(x,z)<180){house(sw.x+x,sw.z+z,9,swr);road(sw.x+x,sw.z+z+13,13,4);atlasTree(sw,x+8,z-9,swr);}}
+for(let i=0;i<11;i++)block(sw,37+i*10,123,6,.16,56,i%2?0x77924b:0x9bb35f,null,'tree');block(sw,132,115,19,9,23,0xa63e36,'Farm barn');part('roof',sw.x+132,20,sw.z+115,14,6,17,0x59606a,'Barn roof',Math.PI/4,roofUnit);block(sw,155,114,7,18,7,0xc7c1ac,'Farm silo','concrete');sign('TOWN GREEN',sw.x+12,12,sw.z+12,20,3,'#35694c');
+// MANHATTAN: recognizable setback silhouettes and park. Scale adapted to flight arena.
+atlasNeighborhood(ny,(x,z)=>Math.abs(x)<65||Math.abs(z)<32);
+function tier(a,x,z,w,h,l,c,base,name,type='tower'){block(a,x,z,w,h,l,c,name,type,base);return base+h;}
+let b=9;for(const [w,h,l] of [[48,35,40],[36,50,34],[27,48,26],[17,30,17],[9,16,9]])b=tier(ny,-42,-48,w,h,l,0xb6b1a5,b,'Empire State Building');part('concrete',ny.x-42,b+12,ny.z-48,1.6,24,1.6,0xcdd2d4,'Empire State spire',0,cylUnit);
+b=9;for(const [w,h,l] of [[35,60,35],[29,56,29],[22,22,22],[15,12,15]])b=tier(ny,55,-45,w,h,l,0xc3c6c9,b,'Chrysler Building');part('concrete',ny.x+55,b+12,ny.z-45,13,24,13,0xdde8ec,'Chrysler crown',0,needleUnit);part('concrete',ny.x+55,b+31,ny.z-45,1,18,1,0xe1e5e6,'Chrysler spire',0,cylUnit);
+part('glass',ny.x+47,100,ny.z+75,32,182,32,0x94c4dc,'One World Trade Center',Math.PI/4,octUnit);part('concrete',ny.x+47,210,ny.z+75,1.7,38,1.7,0xe2ecf1,'One World Trade spire',0,cylUnit);
+block(ny,-67,73,75,.22,105,0x55874d,null,'tree');const nyr=seeded(71);for(let i=0;i<44;i++)atlasTree(ny,-67+(nyr()-.5)*66,73+(nyr()-.5)*95,nyr);block(ny,-65,72,22,.32,33,0x449bb4,null,'glass');sign('CENTRAL PARK',ny.x-66,12,ny.z+124,27,3,'#276743');
+// CRYSTAL CITY: glass-only towers, transparent-looking facades and glass sky bridges.
+const glr=seeded(209);for(let ix=-3;ix<=3;ix++)for(let iz=-3;iz<=3;iz++){let dx=ix*49,dz=iz*49;if(Math.hypot(dx,dz)>178||(ix===0&&iz===0))continue;let h=38+glr()*113,w=18+glr()*13;block(crystal,dx,dz,w,h,w,0xb0e4f4,'Crystal glass tower','glass');for(let y=18;y<h;y+=12)block(crystal,dx,dz,w+.3,.45,w+.3,0xa8ddf1,null,'glass',y);part('glass',crystal.x+dx,9+h+8,crystal.z+dz,w*.82,16,w*.82,0x9ed5eb,'Glass crown',Math.PI/4,needleUnit);}
+for(let k=0;k<4;k++){let angle=k*Math.PI/2;part('glass',crystal.x+Math.cos(angle)*27,55,crystal.z+Math.sin(angle)*27,19,8,42,0xaddcea,'Glass skybridge',angle+Math.PI/2);}
+part('glass',crystal.x,101,crystal.z,36,184,36,0x9dddf2,'Crystal central spire',Math.PI/4,octUnit);part('glass',crystal.x,216,crystal.z,36,46,36,0xc3f2ff,'Crystal apex',Math.PI/4,needleUnit);sign('CRYSTAL DISTRICT',crystal.x,14,crystal.z-27,38,5,'#286783');
+// PARIS: Eiffel lattice, Arc de Triomphe and Louvre glass pyramid.
+const px=paris.x,pz=paris.z-45;for(let sx of [-1,1])for(let sz of [-1,1]){let a=new THREE.Vector3(px+sx*27,9,pz+sz*27),b=new THREE.Vector3(px+sx*13,57,pz+sz*13),c=new THREE.Vector3(px+sx*3,117,pz+sz*3);beamBetween(a,b,4.2,0x776658,'Eiffel Tower leg');beamBetween(b,c,3.1,0x776658,'Eiffel Tower leg');}for(let h of [42,57,91,117]){let r=THREE.MathUtils.lerp(26,3,(h-9)/108);part('concrete',px,h,pz,r*2.25,2.7,r*2.25,0x8c7561,'Eiffel viewing deck');}for(let h=17;h<112;h+=11){let r=27-(h-9)*.22;for(const z of [-r,r])beamBetween(new THREE.Vector3(px-r,h,pz+z),new THREE.Vector3(px+r-3,h+10,pz+z*.92),1.2,0x796959,null);}part('concrete',px,130,pz,1.4,25,1.4,0x66666a,'Eiffel antenna',0,cylUnit);
+for(const dx of [-15,15])block(paris,dx+80,76,12,30,16,0xdac8a7,'Arc de Triomphe pier');block(paris,80,76,44,10,19,0xe0cfb1,'Arc de Triomphe top','concrete',39);part('glass',paris.x-85,22,paris.z+78,44,26,44,0xa8dcec,'Louvre Pyramid',Math.PI/4,roofUnit);for(let i=0;i<6;i++)block(paris,-120+i*44,148,34,18,22,0xcbbb9e,'Parisian apartment');
+// LONDON: Elizabeth Tower, palace blocks, iconic twin-tower bridge.
+block(london,-62,-55,18,84,18,0xbfa77b,'Elizabeth Tower');for(let k=0;k<4;k++){const t=k*Math.PI/2;const clock=new THREE.Mesh(new THREE.CircleGeometry(6,32),new THREE.MeshBasicMaterial({color:0xf2e5c6,side:THREE.DoubleSide}));clock.position.set(london.x-62+Math.sin(t)*9.05,83,london.z-55+Math.cos(t)*9.05);clock.rotation.y=t;worldGroup.add(clock);const hand=new THREE.Mesh(new THREE.BoxGeometry(.45,4,.15),new THREE.MeshBasicMaterial({color:0x30383d}));hand.position.copy(clock.position).add(new THREE.Vector3(Math.sin(t)*.15,1.4,Math.cos(t)*.15));hand.rotation.y=t;worldGroup.add(hand);}part('roof',london.x-62,101,london.z-55,15,18,15,0x657073,'Big Ben roof',Math.PI/4,roofUnit);
+for(let i=0;i<5;i++)block(london,-25+i*25,-55,24,23,35,0xc0ac87,'Westminster palace');
+for(const dx of [-47,47]){block(london,dx,95,23,53,24,0xa8a69d,'Tower Bridge tower');part('roof',london.x+dx,68,london.z+95,17,12,17,0x6d8594,'Bridge turret roof',Math.PI/4,roofUnit);}block(london,0,95,118,3,14,0x758e9b,'Tower Bridge road','concrete',14);block(london,0,95,96,5,7,0x8db0c0,'Upper bridge walkway','glass',50);for(let i=0;i<4;i++){block(london,-125+i*35,7,8,5,4,0xb51c2e,'Red double-decker bus');}
+// TOKYO: lattice landmark, Shibuya zebra crossing, pagoda and dense urban blocks.
+atlasNeighborhood(tokyo,(x,z)=>Math.abs(x)<50||Math.abs(z)<37);
+for(let sx of [-1,1])for(let sz of [-1,1]){let a=new THREE.Vector3(tokyo.x+sx*25,9,tokyo.z-50+sz*25),b=new THREE.Vector3(tokyo.x+sx*7,99,tokyo.z-50+sz*7);beamBetween(a,b,3.3,0xe75538,'Tokyo Tower leg');}for(let h=26;h<110;h+=15){let w=48-(h-9)*.38;part('concrete',tokyo.x,h,tokyo.z-50,w,3,w,h%2?0xe9583b:0xe7e5df,'Tokyo Tower crossbar');}part('concrete',tokyo.x,133,tokyo.z-50,2,67,2,0xf05736,'Tokyo Tower antenna',0,cylUnit);
+for(let k=0;k<9;k++){block(tokyo,-24+k*6,0,2.8,.06,30,0xf9f9f5,null,'light',9.42);block(tokyo,0,-24+k*6,30,.06,2.8,0xf9f9f5,null,'light',9.42);}for(let i=0;i<5;i++){let w=31-i*4;block(tokyo,65,82,w*.62,7,w*.62,0xd3c6a6,'Pagoda floor','concrete',9+i*9);part('roof',tokyo.x+65,17+i*9,tokyo.z+82,w*.72,4,w*.72,0x3c4e53,'Pagoda roof',Math.PI/4,roofUnit);}sign('SHIBUYA',tokyo.x,17,tokyo.z-27,27,5,'#262558');
+// DUBAI: stepped Burj Khalifa and sail hotel, gold/white promenade architecture.
+let db=9;for(const [w,h] of [[48,56],[39,53],[30,49],[23,44],[16,38],[9,27]]){part('glass',dubai.x-30,db+h/2,dubai.z-52,w,h,w,0xb8d8e2,'Burj Khalifa tier',Math.PI/6,octUnit);db+=h;}part('concrete',dubai.x-30,db+22,dubai.z-52,1.4,44,1.4,0xd6e5ea,'Burj Khalifa spire',0,cylUnit);
+const sailShape=new THREE.Shape();sailShape.moveTo(-20,0);sailShape.quadraticCurveTo(-29,65,8,116);sailShape.lineTo(15,116);sailShape.lineTo(17,0);sailShape.closePath();const sailHotel=new THREE.Mesh(new THREE.ExtrudeGeometry(sailShape,{depth:11,bevelEnabled:false,curveSegments:20}),new THREE.MeshStandardMaterial({color:0xf4f4e8,roughness:.3,metalness:.2}));sailHotel.position.set(dubai.x+72,9,dubai.z+62);worldGroup.add(sailHotel);registerAtlasCollider(new THREE.Box3().setFromObject(sailHotel),'Sail hotel');block(dubai,80,62,9,83,16,0x92c3d9,'Sail hotel glass atrium','glass');atlasNeighborhood(dubai,(x,z)=>Math.abs(x)<75||Math.abs(z)<80,'glass');
+// SAN FRANCISCO: Painted Ladies, Transamerica pyramid, red suspension bridge.
+const sfr=seeded(151);for(let i=0;i<9;i++){let x=-110+i*25;house(sf.x+x,sf.z-54,9,sfr);block(sf,x,-54,10,3,8,[0xf5d4c0,0xbcd5d7,0xd3c6e6][i%3],'Painted Lady upper floor','house',17);part('roof',sf.x+x,22,sf.z-54,9,4,8,0x4d575c,'Victorian roof',Math.PI/4,roofUnit);}part('concrete',sf.x+73,75,sf.z+55,32,132,32,0xe1ddd0,'Transamerica Pyramid',Math.PI/4,roofUnit);part('concrete',sf.x+73,147,sf.z+55,.9,20,.9,0xe0e3df,'Transamerica spire',0,cylUnit);
+for(const dx of [-95,95]){for(const dz of [-7,7])block(sf,dx,103+dz,4,65,4,0xb34c32,'Golden Gate tower');for(let y of [30,50,72])block(sf,dx,103,5,4,18,0xb34c32,'Golden Gate tower brace','concrete',y);}block(sf,0,103,238,2,16,0x554c49,'Golden Gate roadway','road',15);for(let side of [-1,1])for(let i=0;i<24;i++){const x=-115+i*10,x2=x+10;const h=q=>29+42*Math.pow(Math.abs(q)/100,2);beamBetween(new THREE.Vector3(sf.x+x,h(x),sf.z+103+side*7),new THREE.Vector3(sf.x+x2,h(x2),sf.z+103+side*7),.9,0xb34c32,null);block(sf,x,103+side*7,.4,h(x)-18,.4,0xb34c32,null,'concrete',18);}
+// Detailed streetscapes, distinctive low-rise town centers and planted squares.
+for(const a of [paris,london,sf]){const rng=seeded(a.seed*131);for(let iz=-3;iz<=3;iz++)for(let ix=-3;ix<=3;ix++){let dx=ix*43,dz=iz*43;if(Math.hypot(dx,dz)>174)continue;
+ const nearLandmark=a===paris?(Math.hypot(dx,dz+45)<60||Math.hypot(dx-80,dz-76)<43||Math.hypot(dx+85,dz-78)<45||dz>110):a===london?(Math.abs(dz+55)<35||Math.abs(dz-95)<30||Math.abs(dz)<20):(Math.abs(dz+54)<35||Math.abs(dz-103)<30||Math.hypot(dx-73,dz-55)<40);if(nearLandmark||Math.abs(dx)<17||Math.abs(dz)<17)continue;
+ if(a===sf){house(a.x+dx,a.z+dz,9,rng);house(a.x+dx+14,a.z+dz,9,rng);}else{const w=25,h=12+rng()*13,l=24;block(a,dx,dz,w,h,l,a===paris?0xc5b49b:0xa77e68,'Historic row building','house');part('roof',a.x+dx,9+h+2.6,a.z+dz,w*.70,5.2,l*.70,0x56616a,'Mansard roof',Math.PI/4,roofUnit);for(let floor=0;floor<3;floor++)for(let j=-2;j<=2;j++)part('glass',a.x+dx+j*4,12+floor*4,a.z+dz-l/2-.12,2,2.6,.2,0xa6bbc8);}
+ }}
+for(const a of atlas){for(let i=-3;i<=3;i++){const x=a.x+i*36,z=a.z+7;part('concrete',x,12,z,.32,5.6,.32,0x52616b,'Streetlamp',0,cylUnit);part('light',x,15,z,1.3,.4,.7,0xffedb7);}}
+// Short channel connections between inner and outer districts; central lagoon stays open.
+for(let i=0;i<8;i++){const near=allPOIs.slice(0,8).map(a=>[a,Math.hypot(a.x-atlas[i].x,a.z-atlas[i].z)]).sort((a,b)=>a[1]-b[1])[0][0];channelBridge(near,atlas[i]);}
+
+for(const {geo,mat,parts} of batches.values()){const inst=new THREE.InstancedMesh(geo,mat,parts.length);parts.forEach((a,i)=>{dummy.position.set(a.x,a.y,a.z);dummy.rotation.set(0,a.rot,0);dummy.scale.set(a.sx,a.sy,a.sz);dummy.updateMatrix();inst.setMatrixAt(i,dummy.matrix);inst.setColorAt(i,new THREE.Color(a.color));});inst.computeBoundingSphere();worldGroup.add(inst);}
+// Animated civilian traffic and sailboats in the harbor and coastal channels.
+const horizonBoats=[];const boatHull=new THREE.MeshStandardMaterial({color:0xf1eee5,roughness:.5});const boatDark=new THREE.MeshStandardMaterial({color:0x26465a,roughness:.65});
+for(let i=0;i<16;i++){const group=new THREE.Group();const hull=new THREE.Mesh(new THREE.BoxGeometry(4.4,1.8,13),boatHull);hull.position.y=1.2;const bow=new THREE.Mesh(new THREE.ConeGeometry(2.25,4,4),boatHull);bow.rotation.x=-Math.PI/2;bow.position.set(0,1.2,-7);const cab=new THREE.Mesh(new THREE.BoxGeometry(3.2,2,4.2),boatDark);cab.position.set(0,2.8,1.1);group.add(hull,bow,cab);if(i%3===0){const mast=new THREE.Mesh(new THREE.CylinderGeometry(.13,.13,11,6),boatDark);mast.position.y=7;const shape=new THREE.Shape();shape.moveTo(0,0);shape.lineTo(0,9);shape.lineTo(4,0);shape.closePath();const sail=new THREE.Mesh(new THREE.ShapeGeometry(shape),new THREE.MeshBasicMaterial({color:0xf4efe0,side:THREE.DoubleSide}));sail.position.y=3;group.add(mast,sail);}worldGroup.add(group);horizonBoats.push({group,i});}
+// Soft procedural cloud sprites with no external image assets.
+const cc=document.createElement('canvas');cc.width=cc.height=128;const cxCloud=cc.getContext('2d');const cr=seeded(822);for(let i=0;i<22;i++){const x=30+cr()*68,y=35+cr()*55,r=13+cr()*27;const gr=cxCloud.createRadialGradient(x,y,0,x,y,r);gr.addColorStop(0,'rgba(255,255,255,.48)');gr.addColorStop(.45,'rgba(239,245,255,.28)');gr.addColorStop(1,'rgba(255,255,255,0)');cxCloud.fillStyle=gr;cxCloud.fillRect(x-r,y-r,r*2,r*2);}const cloudTex=new THREE.CanvasTexture(cc);const cloudMat=new THREE.SpriteMaterial({map:cloudTex,color:0xffeddd,transparent:true,opacity:.65,depthWrite:false,fog:true});const horizonClouds=[];const cloudRand=seeded(721);
+for(let i=0;i<58;i++){const sprite=new THREE.Sprite(cloudMat);const x=(cloudRand()-.5)*4600,z=(cloudRand()-.5)*4600,y=280+cloudRand()*420;const w=170+cloudRand()*300;sprite.scale.set(w,w*.42,1);sprite.position.set(x,y,z);scene.add(sprite);horizonClouds.push({sprite,x,z});}
+function updateHorizon(t){for(const b of horizonBoats){const i=b.i,a=t*.018*(1+i%3*.15)+i*2.399;let x,z;if(i<5){x=metropolis.x+22*Math.sin(Math.sin(a)*2.5);z=metropolis.z+Math.sin(a)*290;b.group.rotation.y=Math.cos(a)>0?Math.PI:0;}else{const r=220+(i%3)*47;x=Math.cos(a)*r;z=MAP_CZ+Math.sin(a)*r;b.group.rotation.y=Math.PI-a;}b.group.position.set(x,Math.sin(t*1.7+i)*.22,z);}for(const c of horizonClouds){c.sprite.position.x=c.x+Math.sin(t*.028+c.z)*34;}}
+
+// ============================================================================
+// 5. PLAYER AIRCRAFT MESH (Sleek Twin-Engine Stunt Fighter)
+// ============================================================================
+const playerGroup = new THREE.Group();
+scene.add(playerGroup);
+
+const pBodyMat = new THREE.MeshStandardMaterial({color:0xe4edf3,roughness:.28,metalness:.55});
+const pAccentMat = new THREE.MeshStandardMaterial({color:0x176d95,roughness:.32,metalness:.4});
+const pDarkMat = new THREE.MeshStandardMaterial({color:0x172b3d,roughness:.35,metalness:.6});
+const pCanopyMat = new THREE.MeshPhysicalMaterial({color:0x14384d,metalness:.5,roughness:.12,clearcoat:1,emissive:0x07364c,emissiveIntensity:.45});
+function jetPart(geo,mat,x=0,y=0,z=0){const m=new THREE.Mesh(geo,mat);m.position.set(x,y,z);playerGroup.add(m);return m;}
+// Sculpted multi-section fuselage (local nose points -Z).
+const profile=[[0,-5.5],[.38,-4.7],[.76,-3.4],[1.04,-1.6],[1.13,.1],[1.02,2.1],[.83,3.7],[.64,4.35],[0,4.45]].map(([r,z])=>new THREE.Vector2(r,z));
+const fus=jetPart(new THREE.LatheGeometry(profile,24),pBodyMat);fus.rotation.x=Math.PI/2;fus.scale.z=.73;
+const canopy=jetPart(new THREE.SphereGeometry(1,24,14),pCanopyMat,0,.64,-2.05);canopy.scale.set(.72,.57,1.73);
+function sweptPanel(points,depth,mat,vertical=false){const shape=new THREE.Shape();points.forEach(([x,y],i)=>i?shape.lineTo(x,y):shape.moveTo(x,y));shape.closePath();const g=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelThickness:.06,bevelSize:.06,bevelSegments:1,steps:1});const m=jetPart(g,mat);if(!vertical)m.rotation.x=-Math.PI/2;return m;}
+for(const side of [-1,1]){
+ const wing=sweptPanel([[side*.7,2.6],[side*5.6,-.15],[side*5.4,-1.25],[side*1.2,-2.5]],.16,pBodyMat);wing.position.y=-.18;
+ const stripe=sweptPanel([[side*3.1,.3],[side*5.6,-.15],[side*5.4,-1.25],[side*3.05,-1.75]],.045,pAccentMat);stripe.position.y=.005;
+ const tail=sweptPanel([[side*.6,-2.25],[side*2.9,-3.15],[side*2.8,-4.15],[side*.7,-4.05]],.12,pAccentMat);tail.position.y=-.05;
+ const fin=sweptPanel([[0,0],[.12,1.9],[1.24,1.65],[2.1,0]],.13,pAccentMat,true);fin.rotation.y=-Math.PI/2;fin.rotation.z=side*.18;fin.position.set(side*.85,.15,2.3);
+ const nacelle=jetPart(new THREE.CylinderGeometry(.54,.66,4.4,18),pDarkMat,side*.75,-.2,1.3);nacelle.rotation.x=Math.PI/2;
+ const intake=jetPart(new THREE.CylinderGeometry(.38,.38,.12,16),pDarkMat,side*.85,-.23,-.95);intake.rotation.x=Math.PI/2;
+ const nozzle=jetPart(new THREE.TorusGeometry(.46,.12,8,20),pDarkMat,side*.75,-.2,3.65);
+ const light=jetPart(new THREE.SphereGeometry(.13,8,8),new THREE.MeshBasicMaterial({color:side<0?0xff3344:0x49ff8c}),side*5.45,.04,.6);
+ const pod=jetPart(new THREE.CylinderGeometry(.15,.2,1.9,10),pDarkMat,side*4.7,-.25,.35);pod.rotation.x=Math.PI/2;
+}
+
+// Twin Afterburner Flame Cones
+const flameMat = new THREE.MeshBasicMaterial({ color: 0x00f5ff });
+const leftFlame = new THREE.Mesh(new THREE.ConeGeometry(0.34, 2.4, 10), flameMat);
+leftFlame.rotation.x = Math.PI / 2;
+leftFlame.position.set(-0.75, -.2, 4.5);
+const rightFlame = leftFlame.clone();
+rightFlame.position.x = 0.75;
+playerGroup.add(leftFlame, rightFlame);
+
+// ============================================================================
+// 6. HIGH-VISIBILITY TRACER BULLETS, HOMING SEEKER MISSILES & PARTICLES
+// ============================================================================
+const activeBullets = [];
+const activeMissiles = [];
+const particles = [];
+
+const playerBoltGeo = new THREE.CylinderGeometry(0.24, 0.24, 6.2, 8);
+playerBoltGeo.rotateX(Math.PI / 2);
+const playerBoltMat = new THREE.MeshBasicMaterial({ color: 0x00f5ff });
+
+const enemyBoltGeo = new THREE.CylinderGeometry(0.32, 0.32, 7.2, 8);
+enemyBoltGeo.rotateX(Math.PI / 2);
+const enemyBoltMat = new THREE.MeshBasicMaterial({ color: 0xff2a55 });
+
+function spawnTracerBullet(origin, dir, speed, isPlayer) {
+  const mesh = new THREE.Mesh(isPlayer ? playerBoltGeo : enemyBoltGeo, isPlayer ? playerBoltMat : enemyBoltMat);
+  mesh.position.copy(origin);
+  mesh.lookAt(origin.clone().add(dir));
+  scene.add(mesh);
+
+  activeBullets.push({
+    mesh,
+    vel: dir.clone().multiplyScalar(speed),
+    life: isPlayer ? 1.45 : 1.45,
+    isPlayer,
+    whooshed: false
+  });
+}
+
+function firePlayerCannons() {
+  if(gameState.freeFlight)return;
+  sfx.playPlayerCannon();
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerGroup.quaternion).normalize();
+
+  // Soft forward cone aim-assist toward nearest enemy jet
+  let bestAimDir = forward.clone();
+  let bestAngle = 0.24; // ~14 deg cone
+  enemyJets.forEach((ej) => {
+    if (!ej.alive) return;
+    const toE = ej.mesh.position.clone().sub(playerGroup.position);
+    const dist = toE.length();
+    if (dist < 420) {
+      const leadTarget = ej.mesh.position.clone().addScaledVector(ej.vel, dist / 340);
+      const dirToLead = leadTarget.sub(playerGroup.position).normalize();
+      const ang = forward.angleTo(dirToLead);
+      if (ang < bestAngle) {
+        bestAngle = ang;
+        bestAimDir = dirToLead;
+      }
+    }
+  });
+
+  [-4.8, 4.8].forEach((wx) => {
+    const muzzle = new THREE.Vector3(wx, 0.05, -1.2).applyMatrix4(playerGroup.matrixWorld);
+    spawnTracerBullet(muzzle, bestAimDir, 340, true);
+  });
+}
+
+function spawnSeekerMissile() {
+  if(gameState.freeFlight||gameState.paused)return;
+  if (gameState.missileAmmo <= 0) return;
+  gameState.missileAmmo--;
+  updateMissilePipsUI();
+  sfx.playMissileLaunch();
+
+  const origin = new THREE.Vector3(0, -0.5, -2.0).applyMatrix4(playerGroup.matrixWorld);
+  const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerGroup.quaternion).normalize();
+
+  let bestTarget = null;
+  let bestScore = Infinity;
+  enemyJets.forEach((ej) => {
+    if (!ej.alive) return;
+    const toE = ej.mesh.position.clone().sub(origin);
+    const dist = toE.length();
+    const ang = forward.angleTo(toE.normalize());
+    const score = dist + ang * 260;
+    if (score < bestScore) {
+      bestScore = score;
+      bestTarget = ej;
+    }
+  });
+
+  const mGroup = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.34, 3.8, 8), new THREE.MeshBasicMaterial({ color: 0xfbbf24 }));
+  body.rotation.x = Math.PI / 2;
+  const flare = new THREE.Mesh(new THREE.SphereGeometry(0.7, 8, 8), new THREE.MeshBasicMaterial({ color: 0xf43f5e }));
+  flare.position.z = 2.0;
+  mGroup.add(body, flare);
+  mGroup.position.copy(origin);
+  mGroup.lookAt(origin.clone().add(forward));
+  scene.add(mGroup);
+
+  activeMissiles.push({
+    mesh: mGroup,
+    vel: forward.multiplyScalar(175),
+    target: bestTarget,
+    life: 4.5,
+    smokeTimer: 0
+  });
+}
+
+function spawnExplosion(pos, colorHex = 0xff5500, count = 24, scale = 1.0) {
+  sfx.playExplosion();
+  const mat = new THREE.MeshBasicMaterial({ color: colorHex });
+  const geo = new THREE.DodecahedronGeometry(0.95 * scale, 0);
+  for (let i = 0; i < count; i++) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.copy(pos);
+    scene.add(m);
+    particles.push({
+      mesh: m,
+      vel: new THREE.Vector3(
+        (Math.random() - 0.5) * 48 * scale,
+        (Math.random() - 0.3) * 44 * scale,
+        (Math.random() - 0.5) * 48 * scale
+      ),
+      life: 0.45 + Math.random() * 0.35,
+      isSmoke: false,
+      isRing: false
+    });
+  }
+
+  // Expanding Shockwave Ring
+  const ringMesh = new THREE.Mesh(
+    new THREE.RingGeometry(1.2, 2.4, 24),
+    new THREE.MeshBasicMaterial({ color: colorHex, side: THREE.DoubleSide, transparent: true, opacity: 0.9 })
+  );
+  ringMesh.position.copy(pos);
+  ringMesh.lookAt(camera.position);
+  scene.add(ringMesh);
+  particles.push({
+    mesh: ringMesh,
+    vel: new THREE.Vector3(),
+    life: 0.45,
+    isSmoke: false,
+    isRing: true
+  });
+}
+
+function spawnSmokePuff(pos, colorHex = 0x475569, scale = 1.0) {
+  const m = new THREE.Mesh(
+    new THREE.DodecahedronGeometry(scale, 0),
+    new THREE.MeshBasicMaterial({ color: colorHex, transparent: true, opacity: 0.65 })
+  );
+  m.position.copy(pos);
+  scene.add(m);
+  particles.push({
+    mesh: m,
+    vel: new THREE.Vector3((Math.random() - 0.5) * 4, 2.5 + Math.random() * 2.5, (Math.random() - 0.5) * 4),
+    life: 0.5,
+    isSmoke: true,
+    isRing: false
+  });
+}
+
+function spawnWaterSpray(pos) {
+  const m = new THREE.Mesh(
+    new THREE.BoxGeometry(1.0, 1.0, 1.0),
+    new THREE.MeshBasicMaterial({ color: 0xf0f9ff, transparent: true, opacity: 0.85 })
+  );
+  m.position.copy(pos);
+  m.position.y = 1.3;
+  scene.add(m);
+  particles.push({
+    mesh: m,
+    vel: new THREE.Vector3((Math.random() - 0.5) * 14, 7 + Math.random() * 7, (Math.random() - 0.5) * 14),
+    life: 0.42,
+    isSmoke: false,
+    isRing: false
+  });
+}
+
+// ============================================================================
+// 7. BALANCED ENEMY INTERCEPTOR SQUADRON (Capped at 2 Active Enemy Jets)
+// ============================================================================
+const enemyJets = [];
+const enemyHudPool = document.getElementById('enemy-hud-pool');
+const gunReticleEl = document.getElementById('gun-reticle');
+const leadReticleEl = document.getElementById('lead-reticle');
+const hitMarkerEl = document.getElementById('hit-marker');
+
+function createEnemyJetMesh() {
+  const g = new THREE.Group();
+  const hullMat = new THREE.MeshStandardMaterial({ color: 0x18181b, roughness: 0.35, metalness: 0.5 });
+  const trimMat = new THREE.MeshStandardMaterial({ color: 0xe11d48, emissive: 0x881337, emissiveIntensity: 0.45 });
+
+  const fuse = new THREE.Mesh(new THREE.ConeGeometry(1.05, 7.8, 10), hullMat);
+  fuse.rotation.x = -Math.PI / 2;
+  const wing = new THREE.Mesh(new THREE.BoxGeometry(9.8, 0.18, 2.3), trimMat);
+  wing.position.z = 0.4;
+  const tailL = new THREE.Mesh(new THREE.BoxGeometry(0.16, 1.6, 1.2), trimMat);
+  tailL.position.set(-0.9, 0.8, 3.0);
+  tailL.rotation.z = 0.25;
+  const tailR = tailL.clone();
+  tailR.position.x = 0.9;
+  tailR.rotation.z = -0.25;
+
+  const afterburner = new THREE.Mesh(new THREE.ConeGeometry(0.55, 2.8, 8), new THREE.MeshBasicMaterial({ color: 0xff5500 }));
+  afterburner.rotation.x = Math.PI / 2;
+  afterburner.position.z = 4.6;
+
+  // Bright red nose charge-up glow before enemy shoots
+  const telegraphGlow = new THREE.Mesh(
+    new THREE.SphereGeometry(1.4, 10, 10),
+    new THREE.MeshBasicMaterial({ color: 0xff2a55, transparent: true, opacity: 0.92 })
+  );
+  telegraphGlow.position.z = -4.2;
+  telegraphGlow.visible = false;
+
+  g.add(fuse, wing, tailL, tailR, afterburner, telegraphGlow);
+  g.userData.telegraphGlow = telegraphGlow;
+  return g;
+}
+
+function initEnemySquadron() {
+  enemyJets.forEach((ej) => {
+    scene.remove(ej.mesh);
+    ej.bracketEl.remove();
+    ej.arrowEl.remove();
+  });
+  enemyJets.length = 0;
+  gameState.enemyAttackDelay = 9; // Grace period on launch or exiting free flight.
+
+  // Six hostile fighters, staggered around the airfield.
+  const spawnOffsets=Array.from({length:6},(_,i)=>{const a=i*Math.PI/3;return new THREE.Vector3(Math.sin(a)*210,42+(i%3)*14,-Math.cos(a)*210);});
+  spawnOffsets.forEach((off, idx) => {
+    const mesh = createEnemyJetMesh();mesh.scale.setScalar(idx%3===2?1.16:1);
+    mesh.position.copy(playerGroup.position).add(off);
+    scene.add(mesh);
+
+    const bracketEl = document.createElement('div');
+    bracketEl.className = 'enemy-bracket';
+    bracketEl.innerHTML = `<div class="enemy-hp-bar"><div class="enemy-hp-fill"></div></div><div class="enemy-dist-tag">140m</div>`;
+    enemyHudPool.appendChild(bracketEl);
+
+    const arrowEl = document.createElement('div');
+    arrowEl.className = 'offscreen-arrow';
+    arrowEl.textContent = '▲';
+    enemyHudPool.appendChild(arrowEl);
+
+    enemyJets.push({
+      id: idx,
+      mesh,
+      vel: new THREE.Vector3(0, 0, -64),
+      hp: idx%3===2?145:100,
+      maxHp: idx%3===2?145:100,
+      alive: true,
+      respawnTimer: 0,
+      fireTimer: 5.0 + idx * 1.2,
+      telegraphTimer: 0,
+      burstRemaining: 0,
+      burstGap: 0,
+      orbitPhase: idx * Math.PI,
+      smokeTimer: 0,
+      bracketEl,
+      hpFillEl: bracketEl.querySelector('.enemy-hp-fill'),
+      distTagEl: bracketEl.querySelector('.enemy-dist-tag'),
+      arrowEl
+    });
+  });
+}
+
+// ============================================================================
+// 8. CHECKPOINT RINGS COURSE (Threads Hangars, Ferris Wheel, Volcano & Arches)
+// ============================================================================
+// One active randomized gate, regenerated forever. Count is independent of storage.
+const ringWaypoints = [new THREE.Vector3(0,25,-95)];
+const ringTypes=[{name:'CHECKPOINT',color:0xfbbf24,points:250},{name:'TURBO GATE',color:0x22d3ee,points:350},{name:'REPAIR GATE',color:0x4ade80,points:300},{name:'HIGH VALUE',color:0xe879f9,points:650}];
+let ringType=ringTypes[0],ringNormal=new THREE.Vector3(0,0,-1),ringRadius=13.5;
+const prevPlayerPos=new THREE.Vector3();
+
+const activeRingGroup = new THREE.Group();
+const outerRing = new THREE.Mesh(
+  new THREE.TorusGeometry(13.5, 0.72, 12, 36),
+  new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+);
+const innerRing = new THREE.Mesh(
+  new THREE.TorusGeometry(10.8, 0.42, 10, 32),
+  new THREE.MeshBasicMaterial({ color: 0x00f5ff })
+);
+activeRingGroup.add(outerRing, innerRing);
+const ringTickMat=new THREE.MeshBasicMaterial({color:0xfbbf24});const ringTickGeo=new THREE.BoxGeometry(.75,2.2,.65);for(let i=0;i<12;i++){const a=i*Math.PI/6,m=new THREE.Mesh(ringTickGeo,ringTickMat);m.position.set(Math.cos(a)*16,Math.sin(a)*16,0);m.rotation.z=a-Math.PI/2;activeRingGroup.add(m);}
+scene.add(activeRingGroup);
+const gateApproachMarker=new THREE.Group();const markerMat=new THREE.MeshBasicMaterial({color:0x7be7ff,transparent:true,opacity:.60,depthWrite:false});for(let j=0;j<3;j++){const m=new THREE.Mesh(new THREE.TorusGeometry(3.0+j*.65,.15,6,24),markerMat);m.position.z=-30-j*25;gateApproachMarker.add(m);}scene.add(gateApproachMarker);
+
+// Ring safety: conservative world-space bounds, including every rendered instance.
+// Terrain bounds are built from the actual rendered mesh triangles, in small patches.
+const ringClearance=13, ringApproach=100, ringExit=82, ringCellSize=96;
+const ringObstacleGrid=new Map();
+let ringSafetyReady=false;
+function registerRingObstacle(box){
+ if(box.isEmpty())return;
+ const x0=Math.floor(box.min.x/ringCellSize),x1=Math.floor(box.max.x/ringCellSize),z0=Math.floor(box.min.z/ringCellSize),z1=Math.floor(box.max.z/ringCellSize);
+ for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){const key=x+','+z;if(!ringObstacleGrid.has(key))ringObstacleGrid.set(key,[]);ringObstacleGrid.get(key).push(box);}
+}
+function ringBlock(x0,y0,z0,x1,y1,z1){registerRingObstacle(new THREE.Box3(new THREE.Vector3(x0,y0,z0),new THREE.Vector3(x1,y1,z1)));}
+function buildRingSafety(){
+ if(ringSafetyReady)return;ringSafetyReady=true;worldGroup.updateMatrixWorld(true);
+ const excluded=new Set([zeppelinGroup,balloonEnvInst,balloonBasketInst,seagullInst,lhSpinner,ferrisWheelSpinner,radarDish,windsockCone,...windTurbineRotors,...lavaEmbers.map(e=>e.mesh),...horizonBoats.map(b=>b.group)]);
+ const instMatrix=new THREE.Matrix4(),combined=new THREE.Matrix4(),v=new THREE.Vector3();
+ function scan(o){
+  if(excluded.has(o))return;
+  if(o.isMesh){
+   if(o.material===terrainMat){
+    const a=o.geometry.attributes.position,side=o.geometry.parameters.widthSegments+1,step=4;
+    for(let z=0;z<side-1;z+=step)for(let x=0;x<side-1;x+=step){
+     const b=new THREE.Box3();for(let j=z;j<=Math.min(z+step,side-1);j++)for(let i=x;i<=Math.min(x+step,side-1);i++)b.expandByPoint(v.fromBufferAttribute(a,j*side+i).applyMatrix4(o.matrixWorld));
+     if(b.max.y>0){b.min.y=-10;registerRingObstacle(b);}
+    }
+   }else{
+    o.geometry.computeBoundingBox();const b=o.geometry.boundingBox;
+    if(o.isInstancedMesh){for(let i=0;i<o.count;i++){o.getMatrixAt(i,instMatrix);combined.multiplyMatrices(o.matrixWorld,instMatrix);registerRingObstacle(b.clone().applyMatrix4(combined));}}
+    else registerRingObstacle(b.clone().applyMatrix4(o.matrixWorld));
+   }
+  }
+  for(const child of o.children)scan(child);
+ }
+ scan(worldGroup);
+ // Also respect gameplay collision volumes, even when slightly larger than the art.
+ for(const c of solidColliders)ringBlock(c.minX,c.minY,c.minZ,c.maxX,c.maxY,c.maxZ);
+ // Full motion envelopes for moving or rotating physical scenery.
+ ringBlock(-181,9,110,-127,65,120); // Ferris wheel and cabins
+ ringBlock(-39,44,-29,-29,48,-19); // rotating radar
+ ringBlock(-23,14,61,-15,21,69); // moving windsock
+ for(const r of windTurbineRotors)ringBlock(r.position.x-25,r.position.y-25,r.position.z-3,r.position.x+25,r.position.y+25,r.position.z+3);
+ for(const b of balloonData)ringBlock(b.x-12,b.baseY-25,b.z-12,b.x+12,b.baseY+20,b.z+12);
+ // Zeppelin can occupy any part of its orbit, including its long hull.
+ for(let i=0;i<64;i++){const a=i*Math.PI/32,x=265*Math.cos(a),z=265*Math.sin(a);ringBlock(x-76,113,z-76,x+76,160,z+76);}
+ // Sailboats can traverse the canals and coastal waters, including their masts.
+ ringBlock(metropolis.x-40,-2,metropolis.z-310,metropolis.x+40,14,metropolis.z+310);
+ for(let i=0;i<96;i++){const a=i*Math.PI/48;for(const r of [220,267,314]){const x=r*Math.cos(a),z=MAP_CZ+r*Math.sin(a);ringBlock(x-22,-2,z-22,x+22,15,z+22);}}
+}
+// Segment vs expanded AABB: conservative swept volume enclosing the entire ring.
+function ringSegmentHits(a,b,box,pad){
+ let lo=0,hi=1;
+ for(const k of ['x','y','z']){const d=b[k]-a[k],min=box.min[k]-pad,max=box.max[k]+pad;
+  if(Math.abs(d)<1e-9){if(a[k]<min||a[k]>max)return false;continue;}
+  let t0=(min-a[k])/d,t1=(max-a[k])/d;if(t0>t1)[t0,t1]=[t1,t0];lo=Math.max(lo,t0);hi=Math.min(hi,t1);if(lo>hi)return false;
+ }return true;
+}
+function ringLaneClear(a,b,pad=ringClearance){
+ if(Math.min(a.y,b.y)-pad<3||Math.max(a.y,b.y)+pad>FLIGHT_CEILING)return false;
+ if(Math.max(mapDistance(a.x,a.z),mapDistance(b.x,b.z))+pad>MAP_RADIUS-15)return false;
+ const x0=Math.floor((Math.min(a.x,b.x)-pad)/ringCellSize),x1=Math.floor((Math.max(a.x,b.x)+pad)/ringCellSize),z0=Math.floor((Math.min(a.z,b.z)-pad)/ringCellSize),z1=Math.floor((Math.max(a.z,b.z)+pad)/ringCellSize);
+ const seen=new Set();for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++)for(const box of ringObstacleGrid.get(x+','+z)||[]){if(seen.has(box))continue;seen.add(box);if(ringSegmentHits(a,b,box,pad))return false;}
+ return true;
+}
+function obstacleTopAt(x,z,alt){let h=worldHeight(x,z);const boxes=ringObstacleGrid.get(Math.floor(x/ringCellSize)+','+Math.floor(z/ringCellSize))||[];for(const b of boxes)if(x>b.min.x-5&&x<b.max.x+5&&z>b.min.z-5&&z<b.max.z+5&&alt+15>b.min.y&&alt-7<b.max.y)h=Math.max(h,b.max.y);return h;}
+function safeRingCandidate(c,n){return ringLaneClear(c.clone().addScaledVector(n,-ringApproach),c.clone().addScaledVector(n,ringExit));}
+let lastGatePOI=null,gatePOI=null,gateSeconds=0,gateTotal=36,gatePending=false;
+function positionRings(){
+ buildRingSafety();const p=playerGroup.position,old=ringWaypoints[0];let candidate=null,normal=null,chosen=null;
+ const nextType=gameState.ringIndex===0?ringTypes[0]:ringTypes[Math.floor(Math.random()*ringTypes.length)];
+ const order=allPOIs.filter(a=>a!==lastGatePOI);for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]];}
+ const tryCandidate=(c,n,a,min)=>{if(c.distanceTo(p)<min||c.distanceTo(old)<650||c.distanceTo(p)>2100||!safeRingCandidate(c,n)||!safeRingCandidate(c,n.clone().negate()))return false;candidate=c;normal=n;chosen=a;return true;};
+ // Prefer low, narrow clear corridors in a different named district, not open sky.
+ for(let pass=0;pass<3&&!candidate;pass++)for(let i=0;i<850&&!candidate;i++){
+  const a=order[i%order.length],r=.15+Math.random()*.78,ang=Math.random()*Math.PI*2,x=a.x+Math.cos(ang)*a.rx*r,z=a.z+Math.sin(ang)*a.rz*r;
+  if(mapDistance(x,z)>MAP_RADIUS-120)continue;
+  const land=worldHeight(x,z),y=Math.max(32,land+18+Math.random()*(pass===0?44:pass===1?105:210));if(y>FLIGHT_CEILING-38)continue;
+  const c=new THREE.Vector3(x,y,z);const heading=Math.atan2(x-p.x,z-p.z)+(Math.random()-.5)*1.0;const n=new THREE.Vector3(Math.sin(heading),(Math.random()-.5)*.22,Math.cos(heading)).normalize();tryCandidate(c,n,a,pass===0?850:680);
+ }
+ // Exhaustive validated fallback over districts. No unchecked placement.
+ if(!candidate)for(const a of order){for(const y of [350,370,315]){for(let i=0;i<16&&!candidate;i++){const ang=i*Math.PI/8,c=new THREE.Vector3(a.x+Math.cos(ang)*a.rx*.48,y,a.z+Math.sin(ang)*a.rz*.48);for(let j=0;j<8&&!candidate;j++){const t=j*Math.PI/4;tryCandidate(c,new THREE.Vector3(Math.sin(t),0,Math.cos(t)),a,680);}}if(candidate)break;}if(candidate)break;}
+ if(!candidate){ // Keep the current safe gate and retry later rather than introduce an obstruction.
+  gateSeconds=5;gatePending=true;activeRingGroup.visible=false;gateApproachMarker.visible=false;return false;
+ }
+ gatePending=false;activeRingGroup.visible=true;ringType=nextType;ringRadius=ringType.name==='HIGH VALUE'?6.5:8.5;lastGatePOI=chosen;gatePOI=chosen;ringWaypoints[0]=candidate;activeRingGroup.scale.setScalar(ringRadius/13.5);activeRingGroup.position.copy(candidate);
+ if(normal.dot(candidate.clone().sub(p))<0)normal.negate();ringNormal.copy(normal);activeRingGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),ringNormal);gateApproachMarker.position.copy(candidate);gateApproachMarker.quaternion.copy(activeRingGroup.quaternion);gateApproachMarker.visible=true;
+ gateTotal=THREE.MathUtils.clamp(11+candidate.distanceTo(p)/105,20,31);gateSeconds=gateTotal;
+ outerRing.material.color.setHex(ringType.color);ringTickMat.color.setHex(ringType.color);document.getElementById('ring-kind').textContent=ringType.name+' · '+String(Math.round((Math.atan2(ringNormal.x,-ringNormal.z)*180/Math.PI+360)%360)).padStart(3,'0')+'°';return true;
+}
+function crossedRing(p){const c=ringWaypoints[0],a=prevPlayerPos.clone().sub(c),b=p.clone().sub(c),da=a.dot(ringNormal),db=b.dot(ringNormal);if(da>=0||db<0||Math.abs(da-db)<.00001)return false;const hit=a.lerp(b,da/(da-db));return hit.length()<ringRadius-1.7&&b.clone().sub(a).normalize().dot(ringNormal)>.78;}
+
+// ============================================================================
+// 9. THREE LIVE SWITCHABLE THEMES (Golden Sunset, Neon Cyber-Night, Storm)
+// ============================================================================
+const themes = {
+  daylight:{topSky:0x3986ca,horizonSky:0xbfe5f0,bottomSky:0x55879d,fogColor:0xa8cbd9,fogDensity:.00092,oceanDeep:0x064c73,oceanShallow:0x27c9b9,sunColor:0xfff4da,hemiSky:0xe4f4ff,hemiGround:0x68808d,sunIntensity:2.5,cityEmissive:.12,bloomStrength:.32},
+  sunset: {
+    topSky: 0x1d4ed8,
+    horizonSky: 0xfb923c,
+    bottomSky: 0x0f172a,
+    fogColor: 0xfdba74,
+    fogDensity: 0.00115,
+    oceanDeep: 0x0369a1,
+    oceanShallow: 0x14b8a6,
+    sunColor: 0xfef08a,
+    hemiSky: 0xffedd5,
+    hemiGround: 0x1e3a5f,
+    sunIntensity: 2.2,
+    cityEmissive: 0.25,
+    bloomStrength: 0.52
+  },
+  cyber: {
+    topSky: 0x050816,
+    horizonSky: 0x311042,
+    bottomSky: 0x020617,
+    fogColor: 0x1e1b4b,
+    fogDensity: 0.00125,
+    oceanDeep: 0x090d24,
+    oceanShallow: 0x06b6d4,
+    sunColor: 0xf472b6,
+    hemiSky: 0x38bdf8,
+    hemiGround: 0x0f172a,
+    sunIntensity: 1.35,
+    cityEmissive: 1.45,
+    bloomStrength: 0.88
+  },
+  storm: {
+    topSky: 0x0f172a,
+    horizonSky: 0x334155,
+    bottomSky: 0x090d16,
+    fogColor: 0x334155,
+    fogDensity: 0.00165,
+    oceanDeep: 0x0f172a,
+    oceanShallow: 0x334155,
+    sunColor: 0x94a3b8,
+    hemiSky: 0x64748b,
+    hemiGround: 0x0f172a,
+    sunIntensity: 1.1,
+    cityEmissive: 0.75,
+    bloomStrength: 0.62
+  }
+};
+
+const themeOrder = ['daylight', 'sunset', 'cyber', 'storm'];
+let currentThemeKey = 'daylight';
+
+function applyTheme(key) {
+  currentThemeKey = key;
+  const t = themes[key];
+  skyUniforms.uTopColor.value.setHex(t.topSky);
+  skyUniforms.uHorizonColor.value.setHex(t.horizonSky);
+  skyUniforms.uBottomColor.value.setHex(t.bottomSky);
+  scene.fog.color.setHex(t.fogColor);
+  scene.fog.density = t.fogDensity * .44; oceanUniforms.uFogDensity.value = scene.fog.density;
+  oceanUniforms.uDeepColor.value.setHex(t.oceanDeep);
+  oceanUniforms.uShallowColor.value.setHex(t.oceanShallow);
+  oceanUniforms.uSunColor.value.setHex(t.sunColor);
+  hemiLight.color.setHex(t.hemiSky);
+  hemiLight.groundColor.setHex(t.hemiGround);
+  sunLight.color.setHex(t.sunColor);
+  sunLight.intensity = t.sunIntensity;
+  cityMat.emissiveIntensity = t.cityEmissive;
+  if (bloomPass) bloomPass.strength = t.bloomStrength;
+
+  document.querySelectorAll('.theme-btn[data-theme]').forEach((btn) => {
+    btn.classList.toggle('active', btn.dataset.theme === key);
+  });
+}
+
+document.querySelectorAll('.theme-btn[data-theme]').forEach((btn) => {
+  btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
+});
+
+// ============================================================================
+// 10. GAME STATE, CAR-LIKE FLIGHT CONTROLS & INPUT HANDLERS
+// ============================================================================
+const gameState = {
+  playing: false,
+  score: 0,
+  combo: 1.0,
+  comboTimer: 0,
+  hull: 100,
+  boost: 100,
+  speed: 105 * 1.21,
+  yaw: 0,
+  pitch: 0,
+  visualRoll: 0,
+  barrelRollTimer: 0,
+  turboTimer: 0,
+  ringIndex: 0,
+  kills: 0,
+  fireCooldown: 0,
+  missileAmmo: 3,
+  missileRegenTimer: 0,
+  cameraMode: 'chase',
+  mouseFiring: false,
+  invertPitch: false,
+  screenShake: 0,
+  waveSkimToastCooldown: 0,
+  lightningTimer: 4.5, paused:false, freeFlight:false, damageCooldown:0, plasmaCooldown:0, enemyAttackDelay:9, rollCooldown:0, maxCombo:1, missionIndex:0, missionProgress:0, lowTime:0, nearMissCooldown:0
+};
+
+const keys = {};
+
+window.addEventListener('keydown', (e) => {
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code))e.preventDefault();
+  if(e.code==='KeyB'&&!e.repeat){toggleFrontierMap();return;}if(e.code==='Escape'&&!e.repeat){if(mapOpen)toggleFrontierMap();else togglePause();return;}
+  if(e.code==='KeyG'&&!e.repeat){toggleFreeFlight();return;}
+  if(gameState.paused)return;
+  keys[e.code] = true;
+  if (e.code === 'Space' && !e.repeat && gameState.playing && gameState.rollCooldown <= 0) {
+    triggerBarrelRoll();
+  }
+  if (e.code === 'KeyE' && !e.repeat && gameState.playing) {
+    spawnSeekerMissile();
+  }
+  if (e.code === 'KeyC') {
+    toggleCameraMode();
+  }
+  if (e.code === 'KeyT') {
+    const next = themeOrder[(themeOrder.indexOf(currentThemeKey) + 1) % themeOrder.length];
+    applyTheme(next);
+  }
+  if (e.code === 'KeyI') {
+    toggleInvertPitch();
+  }
+  if (e.code === 'KeyM') {
+    toggleMute();
+  }
+});
+
+window.addEventListener('keyup', (e) => {
+  keys[e.code] = false;
+});
+
+canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+canvas.addEventListener('mousedown', (e) => {
+  if (!gameState.playing || gameState.paused) return;
+  if (e.button === 0) gameState.mouseFiring = true;
+  if (e.button === 2) spawnSeekerMissile();
+});
+window.addEventListener('mouseup', () => {
+  gameState.mouseFiring = false;
+});
+
+// Touch Controls
+document.querySelectorAll('.t-btn').forEach((btn) => {
+  const code = btn.dataset.key;
+  btn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    keys[code] = true;
+    if (code === 'Space' && gameState.playing && gameState.barrelRollTimer <= 0) triggerBarrelRoll();
+    if (code === 'KeyE' && gameState.playing) spawnSeekerMissile();
+  });
+  btn.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    keys[code] = false;
+  });
+});
+
+const camBtn = document.getElementById('cam-btn');
+const cockpitFrameEl = document.getElementById('cockpit-frame');
+function toggleCameraMode() {
+  gameState.cameraMode = gameState.cameraMode === 'chase' ? 'nose' : 'chase';
+  camBtn.textContent = `CAM: ${gameState.cameraMode.toUpperCase()}`;
+  camBtn.classList.toggle('active', gameState.cameraMode === 'nose');
+  cockpitFrameEl.style.display = gameState.cameraMode === 'nose' ? 'block' : 'none';
+}
+camBtn.addEventListener('click', toggleCameraMode);
+
+const invertBtn = document.getElementById('invert-btn');
+function toggleInvertPitch() {
+  gameState.invertPitch = !gameState.invertPitch;
+  invertBtn.textContent = `PITCH: ${gameState.invertPitch ? 'INVERTED' : 'NORMAL'}`;
+  invertBtn.classList.toggle('active', gameState.invertPitch);
+}
+invertBtn.addEventListener('click', toggleInvertPitch);
+
+const muteBtn = document.getElementById('mute-btn');
+function toggleMute() {
+  sfx.init();
+  sfx.setMuted(!sfx.muted);
+  muteBtn.textContent = `AUDIO: ${sfx.muted ? 'OFF' : 'ON'}`;
+  muteBtn.classList.toggle('active', sfx.muted);
+}
+muteBtn.addEventListener('click', toggleMute);
+
+// UI Helper Functions
+const eventFeedEl = document.getElementById('event-feed');
+function pushFeedMessage(text, color = '#fde047') {
+  const div = document.createElement('div');
+  div.className = 'feed-toast';
+  div.style.color = color;
+  div.textContent = text;
+  eventFeedEl.appendChild(div);
+  setTimeout(() => div.remove(), 2250);
+}
+
+function addScore(basePts, label, color = '#fde047') {
+  const pts = Math.round(basePts * gameState.combo);
+  gameState.score += pts;
+  gameState.combo = Math.min(5.0, +(gameState.combo + 0.25).toFixed(2));
+  gameState.comboTimer = 15.0;
+  if (label) pushFeedMessage(label, color);
+}
+
+function refillBoost(amount) {
+  gameState.boost = Math.min(100, gameState.boost + amount);
+}
+
+function updateMissilePipsUI() {
+  for (let i = 0; i < 3; i++) {
+    const pip = document.getElementById(`mpip-${i}`);
+    if (pip) pip.classList.toggle('empty', i >= gameState.missileAmmo);
+  }
+}
+
+function flashHitMarker() {
+  hitMarkerEl.classList.add('active');
+  clearTimeout(hitMarkerEl._t);
+  hitMarkerEl._t = setTimeout(() => hitMarkerEl.classList.remove('active'), 100);
+}
+
+function triggerBarrelRoll() {
+  if(gameState.rollCooldown>0||gameState.paused)return;gameState.rollCooldown=2.5;
+  gameState.barrelRollTimer = 0.55;
+  sfx.playBarrelRoll();
+  pushFeedMessage('EVASIVE BARREL ROLL!', '#38bdf8');
+}
+
+function damagePlayer(amount, reason = 'IMPACT') {
+  const plasma = reason === 'ENEMY PLASMA HIT';
+  if (gameState.freeFlight || !gameState.playing || gameState.damageCooldown>0 || (plasma && (gameState.plasmaCooldown>0 || gameState.barrelRollTimer>0))) return;
+  gameState.damageCooldown=.55;
+  if(plasma){gameState.plasmaCooldown=2.0;gameState.enemyAttackDelay=Math.max(gameState.enemyAttackDelay,4.0);}
+  gameState.hull = Math.max(0, gameState.hull - amount);
+  gameState.combo = 1.0;
+  gameState.screenShake = 0.55;
+  pushFeedMessage(`${reason}! -${amount}% HULL`, '#ff2a55');
+  if (gameState.hull <= 0) {
+    endGame(false);
+  }
+}
+
+function startGame() {
+  sfx.init();
+  document.getElementById('overlay-modal').style.display = 'none';
+
+  gameState.playing = true;gameState.paused=false;gameState.damageCooldown=0;gameState.plasmaCooldown=0;gameState.enemyAttackDelay=9;gameState.rollCooldown=0;gameState.missionIndex=0;gameState.missionProgress=0;gameState.lowTime=0;gameState.maxCombo=1;gameState.nearMissCooldown=0;gameState.mouseFiring=false;clearKeys();resetTrails();
+  document.getElementById('pause-layer').style.display='none';
+  gameState.score = 0;
+  gameState.combo = 1.0;
+  gameState.comboTimer = 0;
+  gameState.hull = 100;
+  gameState.boost = 100;
+  gameState.speed = 105 * 1.21;
+  gameState.yaw = 0;
+  gameState.pitch = 0.04;
+  gameState.visualRoll = 0;
+  gameState.barrelRollTimer = 0;
+  gameState.turboTimer = 0;
+  gameState.ringIndex = 0;lastGatePOI=null;lastEntered=null;visitedPOIs.clear();gateSeconds=0;
+  gameState.waveSkimToastCooldown=0;for(const zone of [...stuntZones,...boostGates])zone.cooldown=0;
+  gameState.kills = 0;
+  gameState.fireCooldown = 0;
+  gameState.missileAmmo = 3;
+  gameState.missileRegenTimer = 0;
+  gameState.screenShake = 0;
+
+  playerGroup.position.set(0, 32, 100);prevPlayerPos.copy(playerGroup.position);camera.position.set(0,39,119);playerGroup.updateMatrixWorld(true);
+  playerGroup.rotation.set(0, 0, 0);
+
+  activeBullets.forEach((b) => scene.remove(b.mesh));
+  activeBullets.length = 0;
+  activeMissiles.forEach((m) => scene.remove(m.mesh));
+  activeMissiles.length = 0;
+  particles.forEach((pt) => scene.remove(pt.mesh));
+  particles.length = 0;
+
+  updateMissilePipsUI();
+  initEnemySquadron();
+  positionRings();
+  pushFeedMessage('WORLD ATLAS — CROSS THE LAGOON!', '#00f5ff');updateContractUI();
+}
+
+function endGame(victory) {
+  gameState.playing = false;saveBest();
+  gameState.mouseFiring = false;
+  sfx.updateFlight(0, false, false);
+
+  const modal = document.getElementById('overlay-modal');
+  const content = document.getElementById('modal-content');
+  modal.style.display = 'flex';
+
+  content.innerHTML = `
+    <div class="modal-badge">${victory ? 'AIRSPACE SECURED • COURSE COMPLETE' : 'AIRFRAME CRITICAL'}</div>
+    <h1 class="modal-title">${victory ? 'ISLAND ACE VICTORY!' : 'SHOT DOWN'}</h1>
+    <p class="modal-desc">
+      ${victory
+        ? 'You threaded the archipelago rings, ruled the canyon dogfight, and mastered the skies!'
+        : 'Your aircraft took heavy damage. Use Barrel Rolls [SPACE] to dodge incoming bursts and rings to recharge Shift Boost!'}
+    </p>
+    <div class="controls-grid" style="text-align:center">
+      <div>FINAL SCORE: <span>${gameState.score.toLocaleString()}</span></div>
+      <div>MAX COMBO: <span>${gameState.maxCombo.toFixed(2)}x</span></div>
+      <div>RINGS CLEARED: <span>${gameState.ringIndex}</span></div>
+      <div>JETS DOWNED: <span>${gameState.kills}</span></div>
+    </div>
+    <button class="primary-btn" id="restart-btn">FLY AGAIN</button>
+  `;
+  document.getElementById('restart-btn').addEventListener('click', startGame);
+}
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+
+// ============================================================================
+// 11. SIMULATION & COMBAT UPDATE LOOP
+// ============================================================================
+const tempVec = new THREE.Vector3();
+const screenProjVec = new THREE.Vector3();
+
+function updatePlayer(dt, elapsed) {
+  prevPlayerPos.copy(playerGroup.position);gameState.damageCooldown=Math.max(0,gameState.damageCooldown-dt);gameState.plasmaCooldown=Math.max(0,gameState.plasmaCooldown-dt);gameState.rollCooldown=Math.max(0,gameState.rollCooldown-dt);gameState.nearMissCooldown=Math.max(0,gameState.nearMissCooldown-dt);
+  // 1. Car-Like Horizontal Turn Steering (A/D or Left/Right directly steers yaw)
+  let turnInput = 0;
+  if (keys['KeyA'] || keys['ArrowLeft']) turnInput += 1;
+  if (keys['KeyD'] || keys['ArrowRight']) turnInput -= 1;
+
+  const turnRate = keys.KeyQ ? 1.95 : ((keys.ShiftLeft||keys.ShiftRight)?1.05:1.28); // Snappy car-like steering response
+  gameState.yaw += turnInput * turnRate * dt;
+
+  // Visual bank angle up to ~42 deg (0.73 rad) that self-levels smoothly when released
+  const targetVisualRoll = turnInput * 0.73;
+  gameState.visualRoll = THREE.MathUtils.lerp(gameState.visualRoll, targetVisualRoll, dt * 9.0);
+
+  // Smooth Climb / Dive Pitch with gentle automatic horizon leveling
+  let pitchInput = 0;
+  if (keys['KeyW'] || keys['ArrowUp']) pitchInput += 1;
+  if (keys['KeyS'] || keys['ArrowDown']) pitchInput -= 1;
+  if (gameState.invertPitch) pitchInput = -pitchInput;
+
+  if (pitchInput !== 0) {
+    gameState.pitch = THREE.MathUtils.clamp(gameState.pitch + pitchInput * 1.35 * dt, -0.68, 0.68);
+  } else {
+    gameState.pitch = THREE.MathUtils.lerp(gameState.pitch, 0, dt * 2.4);
+  }
+
+  // Barrel Roll Animation
+  let rollExtra = 0;
+  if (gameState.barrelRollTimer > 0) {
+    gameState.barrelRollTimer -= dt;
+    const progress = 1 - Math.max(0, gameState.barrelRollTimer) / 0.55;
+    rollExtra = progress * Math.PI * 2;
+  }
+
+  playerGroup.rotation.order = 'YXZ';
+  playerGroup.rotation.y = gameState.yaw;
+  playerGroup.rotation.x = gameState.pitch;
+  playerGroup.rotation.z = gameState.visualRoll + rollExtra;
+
+  // 2. Shift Afterburner Boost & Speed
+  if (gameState.turboTimer > 0) gameState.turboTimer -= dt;
+  const wantsBoost = (keys['ShiftLeft'] || keys['ShiftRight']) && gameState.boost > 0.5;
+  if (wantsBoost) {
+    gameState.boost = Math.max(0, gameState.boost - 28 * dt);
+  }
+
+  if(!wantsBoost)refillBoost(2.2*dt);
+  const targetSpeed = 1.21 * (keys.KeyQ ? 60 : (gameState.turboTimer > 0 ? 235 : (wantsBoost ? 190 : 105)));
+  gameState.speed = THREE.MathUtils.lerp(gameState.speed, targetSpeed, dt * 5.0);
+
+  const forwardVec = new THREE.Vector3(0, 0, -1).applyEuler(new THREE.Euler(gameState.pitch, gameState.yaw, 0, 'YXZ'));
+  playerGroup.position.addScaledVector(forwardVec, gameState.speed * dt);
+  playerGroup.position.y = Math.min(FLIGHT_CEILING, playerGroup.position.y);
+
+  // Spacious map boundary; steer gently inward at the edge.
+  const edgeDist=mapDistance(playerGroup.position.x,playerGroup.position.z);document.getElementById('boundary-alert').style.opacity=edgeDist>MAP_RADIUS-160?'1':'0';if(edgeDist>MAP_RADIUS-85){const target=Math.atan2(playerGroup.position.x-MAP_CX,playerGroup.position.z-MAP_CZ);const delta=Math.atan2(Math.sin(target-gameState.yaw),Math.cos(target-gameState.yaw));gameState.yaw+=delta*Math.min(1,dt*2.8);if(edgeDist>MAP_RADIUS){const f=MAP_RADIUS/edgeDist;playerGroup.position.x=MAP_CX+(playerGroup.position.x-MAP_CX)*f;playerGroup.position.z=MAP_CZ+(playerGroup.position.z-MAP_CZ)*f;damagePlayer(10,'OUT OF BOUNDS');}}
+  playerGroup.updateMatrixWorld(true);
+
+  // Afterburner Flame Visuals
+  const isFast = wantsBoost || gameState.turboTimer > 0;
+  const flameLen = isFast ? (1.9 + Math.sin(elapsed * 45) * 0.35) : 0.75;
+  leftFlame.scale.set(isFast ? 1.3 : 0.85, flameLen, isFast ? 1.3 : 0.85);
+  rightFlame.scale.copy(leftFlame.scale);
+  flameMat.color.setHex(gameState.turboTimer > 0 ? 0xfbbf24 : (wantsBoost ? 0x00f5ff : 0x38bdf8));
+
+  // 3. Weapons: Dual Plasma Cannons & Regenerating Seeker Missiles
+  if (gameState.fireCooldown > 0) gameState.fireCooldown -= dt;
+  const wantsFire = gameState.mouseFiring || keys['KeyF'] || keys['Enter'];
+  if (wantsFire && gameState.fireCooldown <= 0) {
+    gameState.fireCooldown = 0.125;
+    firePlayerCannons();
+  }
+
+  if (gameState.missileAmmo < 3) {
+    gameState.missileRegenTimer += dt;
+    if (gameState.missileRegenTimer >= 16) {
+      gameState.missileRegenTimer = 0;
+      gameState.missileAmmo++;
+      updateMissilePipsUI();
+    }
+  }
+
+  // Combo Decay
+  if (gameState.combo > 1.0) {
+    gameState.comboTimer -= dt;
+    if (gameState.comboTimer <= 0) {
+      gameState.combo = 1.0;
+    }
+  }
+
+  // 4. Camera Rig (Chase Cam vs First-Person Nose Cam)
+  const targetFov = gameState.turboTimer > 0 ? 88 : (wantsBoost ? 81 : 65);
+  camera.fov = THREE.MathUtils.lerp(camera.fov, targetFov, dt * 6.0);
+  camera.updateProjectionMatrix();
+
+  if (gameState.cameraMode === 'nose') {
+    playerGroup.visible = false;
+    const nosePos = new THREE.Vector3(0, 1.05, -2.5).applyMatrix4(playerGroup.matrixWorld);
+    camera.position.copy(nosePos);
+    camera.lookAt(playerGroup.position.clone().addScaledVector(forwardVec, 65));
+  } else {
+    playerGroup.visible = true;
+    const camHeadingQuat = new THREE.Quaternion().setFromEuler(
+      new THREE.Euler(gameState.pitch * 0.65, gameState.yaw, 0, 'YXZ')
+    );
+    const camOffset = new THREE.Vector3(0, 5.5, 19.5).applyQuaternion(camHeadingQuat);
+    const desiredCamPos = playerGroup.position.clone().add(camOffset);
+    desiredCamPos.y=Math.max(desiredCamPos.y,worldHeight(desiredCamPos.x,desiredCamPos.z)+3);
+
+    camera.position.lerp(desiredCamPos, 1 - Math.exp(-16 * dt));
+
+    if (wantsBoost) {
+      camera.position.x += (Math.random() - 0.5) * 0.14;
+      camera.position.y += (Math.random() - 0.5) * 0.14;
+    }
+    if (gameState.screenShake > 0) {
+      gameState.screenShake -= dt * 1.9;
+      camera.position.x += (Math.random() - 0.5) * gameState.screenShake * 1.6;
+      camera.position.y += (Math.random() - 0.5) * gameState.screenShake * 1.6;
+    }
+
+    camera.lookAt(playerGroup.position.clone().addScaledVector(forwardVec, 30));
+  }
+
+  camera.updateMatrixWorld(true);document.getElementById('speed-vignette').style.opacity=isFast?'.8':'0';updateTrails();
+  sfx.updateFlight(Math.max(0,(gameState.speed / 1.21 - 70) / 150), isFast, true);
+}
+
+function destroyEnemyJet(ej) {
+  ej.alive = false;
+  ej.mesh.visible = false;
+  ej.mesh.userData.telegraphGlow.visible = false;
+  ej.bracketEl.style.display = 'none';
+  ej.arrowEl.style.display = 'none';
+  ej.respawnTimer = 13.0;
+
+  gameState.kills++; contractEvent('kill',1);
+  gameState.screenShake = 0.45;
+  refillBoost(22);
+  spawnExplosion(ej.mesh.position, 0xff5500, 32, 1.35);
+  addScore(500, 'ENEMY JET DOWNED! +500 (+22% BOOST)', '#ff2a55');
+}
+
+function segmentDistance(a,b,p){const d=b.clone().sub(a),len=d.lengthSq();return a.clone().addScaledVector(d,len?THREE.MathUtils.clamp(p.clone().sub(a).dot(d)/len,0,1):0).distanceTo(p);}
+function updateProjectilesAndParticles(dt) {
+  const p = playerGroup.position;
+
+  // Bullets
+  for (let i = activeBullets.length - 1; i >= 0; i--) {
+    const b = activeBullets[i];
+    b.life -= dt;
+    const bulletPrev=b.mesh.position.clone();b.mesh.position.addScaledVector(b.vel, dt);
+
+    if (b.life <= 0 || b.mesh.position.y < 1.1 || !ringLaneClear(bulletPrev,b.mesh.position,.12)) {
+      scene.remove(b.mesh);
+      activeBullets.splice(i, 1);
+      continue;
+    }
+
+    if (b.isPlayer) {
+      let hit = false;
+      for (let j = 0; j < enemyJets.length; j++) {
+        const ej = enemyJets[j];
+        if (!ej.alive) continue;
+        if (segmentDistance(bulletPrev,b.mesh.position,ej.mesh.position) < 6.4) {
+          hit = true;
+          ej.hp -= 25;
+          sfx.playHitConfirm();
+          flashHitMarker();
+          spawnExplosion(b.mesh.position, 0x00f5ff, 7, 0.42);
+          if (ej.hp <= 0) destroyEnemyJet(ej);
+          break;
+        }
+      }
+      if (hit) {
+        scene.remove(b.mesh);
+        activeBullets.splice(i, 1);
+      }
+    } else {
+      const d = segmentDistance(bulletPrev,b.mesh.position,p);
+      if (!b.whooshed && d < 13.5) {
+        b.whooshed = true;
+        sfx.playBulletFlyby();if(d>4&&gameState.nearMissCooldown<=0){gameState.nearMissCooldown=2.5;addScore(75,'CLOSE CALL +75','#a5f3fc');}
+      }
+      if (d < 3.1) {
+        spawnExplosion(b.mesh.position, 0xff2a55, 14, 0.7);
+        scene.remove(b.mesh);
+        activeBullets.splice(i, 1);
+        damagePlayer(5, 'ENEMY PLASMA HIT');
+      }
+    }
+  }
+
+  // Homing Seeker Missiles
+  for (let i = activeMissiles.length - 1; i >= 0; i--) {
+    const m = activeMissiles[i];
+    m.life -= dt;
+    m.smokeTimer -= dt;
+    if (m.smokeTimer <= 0) {
+      m.smokeTimer = 0.025;
+      spawnSmokePuff(m.mesh.position, 0xf8fafc, 0.72);
+    }
+
+    if (m.target && m.target.alive) {
+      const toT = m.target.mesh.position.clone().sub(m.mesh.position).normalize();
+      const curDir = m.vel.clone().normalize();
+      curDir.lerp(toT, dt * 7.2).normalize();
+      m.vel.copy(curDir).multiplyScalar(185);
+      m.mesh.lookAt(m.mesh.position.clone().add(m.vel));
+    }
+
+    m.mesh.position.addScaledVector(m.vel, dt);
+
+    let detonated = false;
+    for (let j = 0; j < enemyJets.length; j++) {
+      const ej = enemyJets[j];
+      if (ej.alive && m.mesh.position.distanceTo(ej.mesh.position) < 8.5) {
+        detonated = true;
+        sfx.playHitConfirm();
+        flashHitMarker();
+        destroyEnemyJet(ej);
+        break;
+      }
+    }
+
+    if (detonated || m.life <= 0 || m.mesh.position.y < 1.1) {
+      if (!detonated) spawnExplosion(m.mesh.position, 0xfbbf24, 14, 0.75);
+      scene.remove(m.mesh);
+      activeMissiles.splice(i, 1);
+    }
+  }
+
+  // Particles & Shockwave Rings
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const pt = particles[i];
+    pt.life -= dt;
+    if (pt.life <= 0) {
+      scene.remove(pt.mesh);
+      particles.splice(i, 1);
+      continue;
+    }
+    if (pt.isRing) {
+      pt.mesh.scale.addScalar(dt * 26);
+      pt.mesh.material.opacity = Math.max(0, pt.life * 2.0);
+    } else {
+      pt.mesh.position.addScaledVector(pt.vel, dt);
+      if (pt.isSmoke) {
+        pt.mesh.scale.addScalar(dt * 2.4);
+        pt.mesh.material.opacity = Math.max(0, pt.life * 1.2);
+      } else {
+        pt.mesh.scale.multiplyScalar(0.95);
+      }
+    }
+  }
+}
+
+function updateEnemySquadron(dt, elapsed) {
+  const p = playerGroup.position;
+  const playerForward = new THREE.Vector3(0, 0, -1).applyQuaternion(playerGroup.quaternion);
+  let lockedLeadWorld = null;
+  let bestLockAngle = 0.28;
+  gameState.enemyAttackDelay=Math.max(0,gameState.enemyAttackDelay-dt);
+
+  enemyJets.forEach((ej) => {
+    if(gameState.freeFlight){ej.mesh.visible=false;ej.bracketEl.style.display='none';ej.arrowEl.style.display='none';return;}
+    if (!ej.alive) {
+      ej.respawnTimer -= dt;
+      if (ej.respawnTimer <= 0) {
+        ej.alive = true;
+        ej.hp = ej.maxHp;
+        ej.mesh.visible = true;
+        const spawnAng = gameState.yaw + (Math.random() - 0.5) * 1.4;
+        ej.mesh.position.set(p.x-Math.sin(spawnAng)*230,Math.max(32,p.y+18),p.z-Math.cos(spawnAng)*230);ej.mesh.position.y=Math.max(ej.mesh.position.y,worldHeight(ej.mesh.position.x,ej.mesh.position.z)+30);ej.fireTimer=7;ej.telegraphTimer=0;ej.burstRemaining=0;
+      }
+      return;
+    }
+
+    // Sweeping Dogfight Trajectory
+    ej.orbitPhase += dt * 0.55;
+    const flankDist = 74 + Math.sin(ej.orbitPhase * 1.2 + ej.id) * 32;
+    const leadAhead = Math.cos(ej.orbitPhase + ej.id * 1.6) * 95;
+    const altOffset = 8 + Math.sin(elapsed * 1.3 + ej.id * 2) * 15;
+
+    const targetPos = new THREE.Vector3(
+      p.x + Math.cos(ej.orbitPhase + ej.id) * flankDist - Math.sin(gameState.yaw) * leadAhead,
+      THREE.MathUtils.clamp(p.y + altOffset, 22, FLIGHT_CEILING),
+      p.z + Math.sin(ej.orbitPhase + ej.id) * flankDist - Math.cos(gameState.yaw) * leadAhead
+    );
+
+    targetPos.y=Math.max(targetPos.y,obstacleTopAt(targetPos.x,targetPos.z,targetPos.y)+18);
+    const desiredDir = targetPos.sub(ej.mesh.position).normalize();
+    const curDir = ej.vel.clone().normalize();
+    curDir.lerp(desiredDir, dt * 2.2).normalize();
+    ej.vel.copy(curDir).multiplyScalar(139 + (ej.id % 3) * 12);
+    ej.mesh.position.addScaledVector(ej.vel, dt);
+    ej.mesh.position.y=Math.max(ej.mesh.position.y,obstacleTopAt(ej.mesh.position.x,ej.mesh.position.z,ej.mesh.position.y)+10);ej.mesh.lookAt(ej.mesh.position.clone().sub(ej.vel));
+
+    // Damaged Smoke Trail
+    if (ej.hp <= 50) {
+      ej.smokeTimer -= dt;
+      if (ej.smokeTimer <= 0) {
+        ej.smokeTimer = 0.08;
+        spawnSmokePuff(ej.mesh.position, 0x334155, 1.05);
+      }
+    }
+
+    // Lead Pip Check
+    const distToPlayer = ej.mesh.position.distanceTo(p);
+    const toEnemy = tempVec.subVectors(ej.mesh.position, p).normalize();
+    const ang = playerForward.angleTo(toEnemy);
+    if (ang < bestLockAngle && distToPlayer < 450) {
+      bestLockAngle = ang;
+      lockedLeadWorld = ej.mesh.position.clone().addScaledVector(ej.vel, distToPlayer / 340);
+    }
+
+    // Telegraphed Spaced Burst Firing
+    const tGlow = ej.mesh.userData.telegraphGlow;
+    if (ej.burstRemaining > 0) {
+      tGlow.visible = true;
+      ej.burstGap -= dt;
+      if (ej.burstGap <= 0) {
+        ej.burstRemaining--;
+        ej.burstGap = 0.45;
+        const aimPoint = p.clone()
+          .addScaledVector(playerForward, Math.min(60,distToPlayer/235*gameState.speed*.55))
+          .add(new THREE.Vector3((Math.random() - 0.5) * 32, (Math.random() - 0.5) * 22, (Math.random() - 0.5) * 32));
+        const shotDir = aimPoint.clone().sub(ej.mesh.position).normalize();
+        if(ringLaneClear(ej.mesh.position,aimPoint,.35)){spawnTracerBullet(ej.mesh.position, shotDir, 235, false);if (distToPlayer < 260) sfx.playEnemyShot();}
+        if (ej.burstRemaining <= 0) {tGlow.visible = false;gameState.enemyAttackDelay=Math.max(gameState.enemyAttackDelay,3.5);}
+      }
+    } else if (ej.telegraphTimer > 0) {
+      ej.telegraphTimer -= dt;
+      tGlow.visible = true;
+      tGlow.scale.setScalar(1.0 + Math.sin(elapsed * 30) * 0.35);
+      if (ej.telegraphTimer <= 0) {
+        ej.burstRemaining = 2;
+        ej.burstGap = 0;
+      }
+    } else {
+      tGlow.visible = false;
+      ej.fireTimer -= dt;
+      if (ej.fireTimer <= 0 && distToPlayer < 260 && gameState.enemyAttackDelay<=0 && !enemyJets.some(other=>other.alive&&(other.telegraphTimer>0||other.burstRemaining>0))) {
+        ej.fireTimer = 6.0 + Math.random() * 4.0;
+        ej.telegraphTimer = 1.15;
+        gameState.enemyAttackDelay=3.5;
+        pushFeedMessage("INCOMING FIRE — ROLL OR BOOST", "#fda4af");
+      }
+    }
+
+    // Project 3D Enemy Bracket & Off-Screen Edge Arrow
+    screenProjVec.copy(ej.mesh.position).project(camera);
+    const isBehind = screenProjVec.z > 1;
+    let sx = (screenProjVec.x * 0.5 + 0.5) * window.innerWidth;
+    let sy = (-screenProjVec.y * 0.5 + 0.5) * window.innerHeight;
+
+    const onScreen = !isBehind && sx >= 24 && sx <= window.innerWidth - 24 && sy >= 54 && sy <= window.innerHeight - 54;
+    if (onScreen) {
+      ej.bracketEl.style.display = 'block';
+      ej.bracketEl.style.left = `${sx}px`;
+      ej.bracketEl.style.top = `${sy}px`;
+      ej.hpFillEl.style.width = `${Math.max(0, (ej.hp / ej.maxHp) * 100)}%`;
+      ej.distTagEl.textContent = `${Math.round(distToPlayer)}m`;
+      ej.arrowEl.style.display = 'none';
+    } else {
+      ej.bracketEl.style.display = 'none';
+      ej.arrowEl.style.display = 'flex';
+      if (isBehind) {
+        sx = window.innerWidth - sx;
+        sy = window.innerHeight - 50;
+      }
+      const cx = window.innerWidth * 0.5;
+      const cy = window.innerHeight * 0.5;
+      const edgeAng = Math.atan2(sy - cy, sx - cx);
+      ej.arrowEl.style.left = `${THREE.MathUtils.clamp(cx + Math.cos(edgeAng) * (cx - 32), 28, window.innerWidth - 28)}px`;
+      ej.arrowEl.style.top = `${THREE.MathUtils.clamp(cy + Math.sin(edgeAng) * (cy - 32), 68, window.innerHeight - 68)}px`;
+      ej.arrowEl.style.transform = `translate(-50%, -50%) rotate(${edgeAng + Math.PI / 2}rad)`;
+    }
+  });
+
+  gunReticleEl.classList.toggle('locked', !!lockedLeadWorld);
+  if (lockedLeadWorld) {
+    screenProjVec.copy(lockedLeadWorld).project(camera);
+    if (screenProjVec.z <= 1) {
+      leadReticleEl.style.display = 'block';
+      leadReticleEl.style.left = `${(screenProjVec.x * 0.5 + 0.5) * window.innerWidth}px`;
+      leadReticleEl.style.top = `${(-screenProjVec.y * 0.5 + 0.5) * window.innerHeight}px`;
+    } else {
+      leadReticleEl.style.display = 'none';
+    }
+  } else {
+    leadReticleEl.style.display = 'none';
+  }
+}
+
+function checkCollisionsAndStunts(dt) {
+  const p = playerGroup.position;
+
+  // 1. Ocean Water Impact & Low-Altitude Wave Skimming (+15% Boost/sec + Water Spray!)
+  if (p.y < 1.25) {
+    spawnExplosion(p, 0x38bdf8, 22, 0.9);
+    p.y = 22;
+    gameState.pitch = 0.25;
+    damagePlayer(35, 'WATER IMPACT');
+    return;
+  }
+
+  const onMainIsland = Math.hypot(p.x, p.z) < 152;
+  const onNorthIsland = Math.hypot(p.x, p.z + 440) < 88;
+
+  const land=worldHeight(p.x,p.z);
+  if (land<.5 && p.y < 8.5) {
+    refillBoost(15 * dt);contractEvent('skim',dt);
+    const leftTip = new THREE.Vector3(-4.6, -0.4, 1.0).applyMatrix4(playerGroup.matrixWorld);
+    const rightTip = new THREE.Vector3(4.6, -0.4, 1.0).applyMatrix4(playerGroup.matrixWorld);
+    spawnWaterSpray(leftTip);
+    spawnWaterSpray(rightTip);
+    if (gameState.waveSkimToastCooldown > 0) {
+      gameState.waveSkimToastCooldown -= dt;
+    } else {
+      gameState.waveSkimToastCooldown = 2.0;
+      addScore(100, 'WAVE SKIMMING! +15% BOOST/s', '#38bdf8');
+    }
+  }
+
+  // 2. Island Ground Scrape
+  if (land>.5 && p.y < land+2.8) {
+    spawnExplosion(p, 0xfb923c, 20, 0.85);
+    p.y = land+18;
+    gameState.pitch = 0.25;
+    damagePlayer(30, 'TERRAIN SCRAPE');
+    return;
+  }
+
+  // 3. Solid Landmark Colliders
+  for (let i = 0; i < solidColliders.length; i++) {
+    const c = solidColliders[i];
+    // Swept aircraft center, expanded by the body radius, prevents high-speed tunneling.
+    if (ringSegmentHits(prevPlayerPos,p,{min:{x:c.minX,y:c.minY,z:c.minZ},max:{x:c.maxX,y:c.maxY,z:c.maxZ}},2.4)) {
+      spawnExplosion(p, 0xf97316, 22, 0.9);
+      p.copy(prevPlayerPos);p.y = Math.min(FLIGHT_CEILING,Math.max(p.y,c.maxY+8));
+      gameState.pitch = 0.25;
+      damagePlayer(30, `${c.name.toUpperCase()} COLLISION`);
+      return;
+    }
+  }
+
+  // 4. Landmark Stunt Threading Zones (+30% Boost + Stunt Bonus!)
+  stuntZones.forEach((sz) => {
+    if (sz.cooldown > 0) {
+      sz.cooldown -= dt;
+    } else if (p.distanceTo(sz.pos) < sz.radius) {
+      sz.cooldown = 5.0;
+      refillBoost(sz.boostRefill);
+      sfx.playRingPass(gameState.combo * 3);
+      spawnExplosion(sz.pos, 0x34d399, 18, 0.8);
+      addScore(sz.points, sz.label, '#34d399');
+    }
+  });
+
+  // 5. Floating Cyan Turbo Boost Gates (+30% Boost + Speed Surge!)
+  boostGates.forEach((bg) => {
+    if (bg.cooldown > 0) {
+      bg.cooldown -= dt;
+    } else if (p.distanceTo(bg.pos) < 14.5) {
+      bg.cooldown = 4.0;
+      gameState.turboTimer = 2.5;
+      refillBoost(30);
+      sfx.playBoostGate();
+      spawnExplosion(bg.pos, 0x00f5ff, 20, 0.85);
+      addScore(200, 'TURBO BOOST GATE! +200 (+30% BOOST)', '#00f5ff');
+    }
+  });
+
+  // True plane crossing, not proximity; never-ending randomized route.
+  const targetPos=ringWaypoints[0];
+  if(!gatePending&&crossedRing(p)){
+    sfx.playRingPass(gameState.combo*4);refillBoost(22);if(gameState.ringIndex%2===1)gameState.missileAmmo=Math.min(3,gameState.missileAmmo+1);updateMissilePipsUI();
+    if(ringType.name==='TURBO GATE')gameState.turboTimer=3.5;
+    if(ringType.name==='REPAIR GATE')gameState.hull=Math.min(100,gameState.hull+20);
+    spawnExplosion(targetPos,ringType.color,24,1.05);addScore(ringType.points,ringType.name+' CLEARED +'+ringType.points,'#fde047');
+    gameState.ringIndex++;contractEvent('ring',1);positionRings();
+  }
+}
+
+// ============================================================================
+// 12. HUD & LIVE MINI-RADAR RENDERING
+// ============================================================================
+const radarCanvas = document.getElementById('radar-canvas');
+const radarCtx = radarCanvas.getContext('2d');
+const waypointMarker = document.getElementById('waypoint-marker');
+const waypointDistEl = document.getElementById('waypoint-dist');
+const ringArrowEl = document.getElementById('ring-offscreen-arrow');
+
+function drawMiniRadar() {
+  const w = radarCanvas.width;
+  const h = radarCanvas.height;
+  const cx = w * 0.5;
+  const cy = h * 0.5;
+  const scale = 0.066;
+
+  radarCtx.clearRect(0, 0, w, h);
+  radarCtx.fillStyle = 'rgba(6, 12, 26, 0.88)';
+  radarCtx.beginPath();
+  radarCtx.arc(cx, cy, cx - 2, 0, Math.PI * 2);
+  radarCtx.fill();
+
+  // Concentric range rings
+  radarCtx.strokeStyle = 'rgba(0, 245, 255, 0.18)';
+  radarCtx.lineWidth = 1;
+  [0.35, 0.68, 0.96].forEach((r) => {
+    radarCtx.beginPath();
+    radarCtx.arc(cx, cy, (cx - 2) * r, 0, Math.PI * 2);
+    radarCtx.stroke();
+  });
+
+  const px = playerGroup.position.x;
+  const pz = playerGroup.position.z;
+  const cosY = Math.cos(gameState.yaw);
+  const sinY = Math.sin(gameState.yaw);
+
+  function toRadar(wx, wz) {
+    const dx = wx - px;
+    const dz = wz - pz;
+    const rx = (dx * cosY - dz * sinY) * scale;
+    const ry = (dx * sinY + dz * cosY) * scale;
+    return [cx + rx, cy + ry];
+  }
+
+  // Island & Landmark footprints
+  const [mIx, mIy] = toRadar(0, 0);
+  radarCtx.fillStyle = 'rgba(34, 197, 94, 0.25)';
+  radarCtx.beginPath();
+  radarCtx.arc(mIx, mIy, 150 * scale, 0, Math.PI * 2);
+  radarCtx.fill();
+
+  const [nIx, nIy] = toRadar(0, -440);
+  radarCtx.beginPath();
+  radarCtx.arc(nIx, nIy, 86 * scale, 0, Math.PI * 2);
+  radarCtx.fill();
+
+  radarCtx.save();radarCtx.beginPath();radarCtx.arc(cx,cy,cx-2,0,Math.PI*2);radarCtx.clip();
+  for(const a of horizonIslands){const [rx,ry]=toRadar(a.x,a.z);radarCtx.fillStyle=a.biome==='desert'?'#b68c6255':'#55b98b44';radarCtx.beginPath();radarCtx.ellipse(rx,ry,a.rx*scale,a.rz*scale,gameState.yaw,0,Math.PI*2);radarCtx.fill();}radarCtx.restore();
+  // Active Checkpoint Ring (Gold Dot)
+  const targetRing = ringWaypoints[0];
+  if (targetRing) {
+    const [rx, ry] = toRadar(targetRing.x, targetRing.z);
+    radarCtx.fillStyle = '#'+ringType.color.toString(16).padStart(6,'0');
+    radarCtx.beginPath();
+    radarCtx.arc(rx, ry, 4.5, 0, Math.PI * 2);
+    radarCtx.fill();
+  }
+
+  // Enemy Interceptor Jets (Crimson Blips)
+  enemyJets.forEach((ej) => {
+    if (!ej.alive || gameState.freeFlight) return;
+    const [ex, ey] = toRadar(ej.mesh.position.x, ej.mesh.position.z);
+    radarCtx.fillStyle = '#ff2a55';
+    radarCtx.beginPath();
+    radarCtx.arc(ex, ey, 3.8, 0, Math.PI * 2);
+    radarCtx.fill();
+  });
+
+  // Player Center Triangle
+  radarCtx.fillStyle = '#00f5ff';
+  radarCtx.beginPath();
+  radarCtx.moveTo(cx, cy - 6);
+  radarCtx.lineTo(cx - 4.5, cy + 5);
+  radarCtx.lineTo(cx + 4.5, cy + 5);
+  radarCtx.closePath();
+  radarCtx.fill();
+}
+
+function updateHUD() {
+  document.getElementById('hud-score').textContent = gameState.score.toLocaleString();
+  document.getElementById('hud-combo').textContent = `${gameState.combo.toFixed(2)}x`;
+  document.getElementById('hud-rings').textContent = `${gameState.ringIndex}`;
+  document.getElementById('hud-kills').textContent = `${gameState.kills}`;
+  document.getElementById('hull-bar').style.width = `${gameState.hull}%`;
+  document.getElementById('boost-bar').style.width = `${gameState.boost}%`;
+  document.getElementById('hud-heading').textContent=String(Math.round((-gameState.yaw*180/Math.PI%360+360)%360)).padStart(3,'0')+'°';
+  document.getElementById('hud-speed').textContent = `${Math.round(gameState.speed * 3.3)} KT`;
+  document.getElementById('hud-alt').textContent = `${Math.max(0, Math.round(playerGroup.position.y * 3.2))} FT`;
+
+  // Project Next Checkpoint Ring + Off-Screen Gold Arrow
+  const targetPos = ringWaypoints[0];
+  if (targetPos) {
+    const dist = Math.round(playerGroup.position.distanceTo(targetPos));
+    waypointDistEl.textContent = `${dist}m`;
+
+    screenProjVec.copy(targetPos).project(camera);
+    const isBehind = screenProjVec.z > 1;
+    let sx = (screenProjVec.x * 0.5 + 0.5) * window.innerWidth;
+    let sy = (-screenProjVec.y * 0.5 + 0.5) * window.innerHeight;
+
+    const isOffscreen = isBehind || sx < 32 || sx > window.innerWidth - 32 || sy < 64 || sy > window.innerHeight - 64;
+    if (isBehind) {
+      sx = window.innerWidth - sx;
+      sy = window.innerHeight - 60;
+    }
+    sx = THREE.MathUtils.clamp(sx, 36, window.innerWidth - 36);
+    sy = THREE.MathUtils.clamp(sy, 72, window.innerHeight - 72);
+    waypointMarker.style.left = `${sx}px`;
+    waypointMarker.style.top = `${sy}px`;
+
+    if (isOffscreen) {
+      ringArrowEl.style.display = 'flex';
+      const cx = window.innerWidth * 0.5;
+      const cy = window.innerHeight * 0.5;
+      const ang = Math.atan2(sy - cy, sx - cx);
+      ringArrowEl.style.left = `${THREE.MathUtils.clamp(cx + Math.cos(ang) * (cx - 42), 34, window.innerWidth - 34)}px`;
+      ringArrowEl.style.top = `${THREE.MathUtils.clamp(cy + Math.sin(ang) * (cy - 42), 72, window.innerHeight - 72)}px`;
+      ringArrowEl.style.transform = `translate(-50%, -50%) rotate(${ang + Math.PI / 2}rad)`;
+    } else {
+      ringArrowEl.style.display = 'none';
+    }
+  }
+
+  drawMiniRadar();updateContractUI();
+}
+
+// ============================================================================
+// 13. MAIN ANIMATION LOOP & WINDOW RESIZE HANDLER
+// ============================================================================
+// Contracts, persistent local best score, pause/free-flight, contrails.
+const contractDefs=[{name:'Ring Runner',detail:'Clear 3 randomized gates',type:'ring',goal:3,reward:1000},{name:'Interceptor Hunt',detail:'Down 2 hostile aircraft',type:'kill',goal:2,reward:1400},{name:'Sea Skimmer',detail:'Skim open water for 5 seconds',type:'skim',goal:5,reward:1200},{name:'Gate Rush',detail:'Clear 5 randomized gates',type:'ring',goal:5,reward:1700}];
+let bestScore=0;try{bestScore=Number(localStorage.getItem('horizon-best')||0)||0;}catch(e){}
+function saveBest(){if(gameState.score>bestScore){bestScore=gameState.score;try{localStorage.setItem('horizon-best',String(bestScore));}catch(e){}}}
+function currentContract(){let c=contractDefs[gameState.missionIndex%contractDefs.length];if(gameState.freeFlight&&c.type==='kill')return {name:'Explorer',detail:'Clear 4 randomized gates',type:'ring',goal:4,reward:1000};return c;}
+function contractEvent(type,value){if(!gameState.playing)return;const c=currentContract();if(c.type!==type)return;gameState.missionProgress+=value;if(gameState.missionProgress>=c.goal){gameState.score+=c.reward;gameState.hull=Math.min(100,gameState.hull+8);refillBoost(45);pushFeedMessage('CONTRACT COMPLETE +'+c.reward+' · HULL REPAIRED','#86efac');sfx.playBoostGate();gameState.missionIndex++;gameState.missionProgress=0;saveBest();}}
+function updateContractUI(){const c=currentContract(),p=playerGroup.position;document.getElementById('mission-count').textContent=String(gameState.missionIndex+1).padStart(2,'0');document.getElementById('mission-name').textContent=c.name;document.getElementById('mission-detail').textContent=c.detail+' · '+Math.min(c.goal,Math.floor(gameState.missionProgress))+'/'+c.goal;document.getElementById('mission-fill').style.width=Math.min(100,100*gameState.missionProgress/c.goal)+'%';updateDistrictHUD(p);gameState.maxCombo=Math.max(gameState.maxCombo,gameState.combo);saveBest();document.getElementById('best-score').textContent=bestScore.toLocaleString();}
+function clearKeys(){Object.keys(keys).forEach(k=>keys[k]=false);gameState.mouseFiring=false;}
+function togglePause(){if(!gameState.playing)return;gameState.paused=!gameState.paused;clearKeys();document.getElementById('pause-layer').style.display=gameState.paused?'flex':'none';if(gameState.paused)sfx.updateFlight(0,false,false);}
+function toggleFreeFlight(){gameState.freeFlight=!gameState.freeFlight;gameState.missionProgress=0;document.getElementById('mode-btn').textContent=gameState.freeFlight?'MODE: FREE':'MODE: ARCADE';document.getElementById('flight-mode').textContent=gameState.freeFlight?'FREE FLIGHT':'ARCADE';if(gameState.playing){if(gameState.freeFlight){activeBullets.forEach(b=>scene.remove(b.mesh));activeBullets.length=0;activeMissiles.forEach(m=>scene.remove(m.mesh));activeMissiles.length=0;}else initEnemySquadron();pushFeedMessage(gameState.freeFlight?'FREE FLIGHT · NO DAMAGE OR HOSTILES':'ARCADE · HOSTILES ACTIVE','#a5f3fc');}updateContractUI();}
+document.getElementById('pause-btn').addEventListener('click',togglePause);document.getElementById('resume-btn').addEventListener('click',togglePause);document.getElementById('mode-btn').addEventListener('click',toggleFreeFlight);window.addEventListener('blur',()=>{if(gameState.playing&&!gameState.paused)togglePause();});
+const trailLength=54;const trails=[-5.35,5.35].map((side,i)=>{const pts=new Float32Array(trailLength*3),colors=new Float32Array(trailLength*3);for(let k=0;k<trailLength;k++){const f=(1-k/(trailLength-1))**1.8;colors.set([.12*f,.8*f,1.0*f],k*3);}const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.BufferAttribute(pts,3).setUsage(THREE.DynamicDrawUsage));g.setAttribute('color',new THREE.BufferAttribute(colors,3));g.setDrawRange(0,0);const mat=new THREE.LineBasicMaterial({vertexColors:true,transparent:true,opacity:.65,blending:THREE.AdditiveBlending,depthWrite:false});const mesh=new THREE.Line(g,mat);mesh.frustumCulled=false;scene.add(mesh);return {side,pts,g,mesh,count:0};});
+function resetTrails(){for(const a of trails){a.count=0;a.g.setDrawRange(0,0);}}
+function updateTrails(){for(const a of trails){const p=new THREE.Vector3(a.side,.03,.65).applyMatrix4(playerGroup.matrixWorld);if(a.count&&Math.hypot(a.pts[0]-p.x,a.pts[1]-p.y,a.pts[2]-p.z)>70){a.count=0;}a.pts.copyWithin(3,0,a.pts.length-3);a.pts.set([p.x,p.y,p.z],0);a.count=Math.min(trailLength,a.count+1);a.g.attributes.position.needsUpdate=true;a.g.setDrawRange(0,a.count);a.mesh.visible=gameState.cameraMode!=='nose'&&(gameState.speed>125*1.21||Math.abs(gameState.visualRoll)>.45||playerGroup.position.y>160);}}
+
+
+let lastEntered=null,poiBannerTimer=0,mapOpen=false,mapPaused=false;const visitedPOIs=new Set();
+function updateDistrictHUD(p){const a=getPOI(p.x,p.z);document.getElementById('region-name').textContent=a?a.name:'Frontier Lagoon';document.getElementById('gate-dest').textContent=gatePending?'SEARCHING FOR SAFE GATE':'NEXT · '+(gatePOI?.name||'—')+' · HDG '+String(Math.round((Math.atan2(ringNormal.x,-ringNormal.z)*180/Math.PI+360)%360)).padStart(3,'0')+'°';const time=document.getElementById('gate-time');time.textContent=gameState.freeFlight?'FREE ROUTE':Math.max(0,Math.ceil(gateSeconds))+'s TO GATE';time.style.color=gateSeconds<9&&!gameState.freeFlight?'#fb7185':'#fbbf24';document.getElementById('gate-clock-fill').style.width=(gameState.freeFlight?100:100*Math.max(0,gateSeconds)/gateTotal)+'%';
+ if(a&&a!==lastEntered&&gameState.playing){lastEntered=a;const el=document.getElementById('poi-banner');document.getElementById('poi-title').textContent=a.name.toUpperCase();document.getElementById('poi-desc').textContent=a.desc;el.classList.add('show');clearTimeout(poiBannerTimer);poiBannerTimer=setTimeout(()=>el.classList.remove('show'),2600);if(!visitedPOIs.has(a.name)){visitedPOIs.add(a.name);if(!gameState.freeFlight){gameState.score+=150;pushFeedMessage('DISTRICT DISCOVERED +150','#a5f3fc');}}}else if(!a)lastEntered=null;document.getElementById('discovery-count').textContent='DISTRICTS '+visitedPOIs.size+'/'+allPOIs.length;}
+function drawFrontierMap(){const c=document.getElementById('frontier-chart'),g=c.getContext('2d'),scale=350/MAP_RADIUS,X=x=>380+(x-MAP_CX)*scale,Z=z=>380+(z-MAP_CZ)*scale;g.fillStyle='#133e52';g.fillRect(0,0,760,760);g.strokeStyle='#65a8c7';g.setLineDash([6,8]);g.beginPath();g.arc(380,380,350,0,Math.PI*2);g.stroke();g.setLineDash([]);const cols={airport:'#9fa786',city:'#92a9b1',campus:'#c5a49b',alpine:'#cbd9df',desert:'#d29c70',tropical:'#76b592',harbor:'#8e9ca0',forest:'#608f79',suburb:'#85a976',metro:'#a5b6c7',crystal:'#66cce1',heritage:'#d0ac93',gold:'#e1bf81'};
+ for(const a of allPOIs){g.fillStyle=cols[a.biome];g.strokeStyle='#d1e4df';g.beginPath();g.ellipse(X(a.x),Z(a.z),a.rx*scale,a.rz*scale,0,0,Math.PI*2);g.fill();g.stroke();g.font='bold 11px system-ui';g.textAlign='center';g.lineWidth=3;g.strokeStyle='#152e3a';g.strokeText(a.name,X(a.x),Z(a.z));g.fillStyle='#fff';g.fillText(a.name,X(a.x),Z(a.z));if(visitedPOIs.has(a.name)){g.fillStyle='#d7ffd7';g.fillText('✓',X(a.x),Z(a.z)+18);}}
+ for(const e of enemyJets){if(e.alive&&!gameState.freeFlight){g.fillStyle='#fb7185';g.beginPath();g.arc(X(e.mesh.position.x),Z(e.mesh.position.z),3,0,Math.PI*2);g.fill();}}g.fillStyle='#acd5e5';g.font='italic 15px system-ui';g.fillText('FRONTIER LAGOON',380,380);const p=playerGroup.position,r=ringWaypoints[0];g.strokeStyle='#ffda79';g.setLineDash([6,5]);g.beginPath();g.moveTo(X(p.x),Z(p.z));g.lineTo(X(r.x),Z(r.z));g.stroke();g.setLineDash([]);g.fillStyle='#ffd166';g.beginPath();g.arc(X(r.x),Z(r.z),6,0,Math.PI*2);g.fill();g.save();g.translate(X(p.x),Z(p.z));g.rotate(-gameState.yaw);g.fillStyle='#00f5ff';g.beginPath();g.moveTo(0,-11);g.lineTo(-7,7);g.lineTo(7,7);g.closePath();g.fill();g.restore();}
+function toggleFrontierMap(){if(!gameState.playing)return;mapOpen=!mapOpen;document.getElementById('frontier-map').style.display=mapOpen?'flex':'none';if(mapOpen){mapPaused=gameState.paused;if(!gameState.paused)togglePause();drawFrontierMap();}else if(!mapPaused&&gameState.paused)togglePause();}
+let hdMode=true;document.getElementById('quality-btn').addEventListener('click',()=>{hdMode=!hdMode;const ratio=Math.min(window.devicePixelRatio,hdMode?2:1);renderer.setPixelRatio(ratio);if(composer)composer.setPixelRatio(ratio);document.getElementById('quality-btn').textContent=hdMode?'HD: ON':'HD: OFF';});
+document.getElementById('map-btn').addEventListener('click',toggleFrontierMap);document.getElementById('map-close').addEventListener('click',toggleFrontierMap);
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const elapsed = clock.elapsedTime;
+  if(gameState.paused)return;
+
+  // Shader & Landmark Animations
+  oceanUniforms.uTime.value = elapsed;
+  gullUniform.uTime.value = elapsed;
+  radarDish.rotation.y += dt * 1.9;
+  lhSpinner.rotation.y += dt * 1.15;
+  outerRing.rotation.z += dt * 1.4;
+  innerRing.rotation.z -= dt * 2.1;
+  ferrisWheelSpinner.rotation.z += dt * 0.28;
+  windsockCone.rotation.y = Math.sin(elapsed * 3.5) * 0.22;
+
+  // Sequential Runway Approach Strobes
+  const activeStrobeIdx = Math.floor(elapsed * 8) % 6;
+  approachStrobes.forEach((s, idx) => {
+    const isLit = (idx % 6) === activeStrobeIdx;
+    s.scale.setScalar(isLit ? 1.55 : 0.7);
+  });
+
+  // Spinning Boost Gates & Wind Turbines
+  boostGates.forEach((bg) => { bg.mesh.rotation.z += dt * 1.8; });
+  windTurbineRotors.forEach((r) => { r.rotation.z += dt * 1.5; });
+
+  // Cruising Zeppelin Orbit
+  const zAng = elapsed * 0.065;
+  zeppelinGroup.position.set(Math.cos(zAng) * 265, 138 + Math.sin(elapsed * 0.6) * 4, Math.sin(zAng) * 265);
+  zeppelinGroup.rotation.y = -zAng;
+
+  // Rising Volcano Magma Embers
+  lavaEmbers.forEach((le) => {
+    le.mesh.position.y += le.speed * dt;
+    if (le.mesh.position.y > 175) le.mesh.position.y = 122;
+  });
+
+  // Instanced Hot Air Balloons Bobbing
+  balloonData.forEach((b, idx) => {
+    const curY = b.baseY + Math.sin(elapsed * 0.8 + b.phase) * 4.5;
+    dummy.position.set(b.x, curY, b.z);
+    dummy.rotation.set(0, elapsed * 0.15 + b.phase, 0);
+    dummy.scale.setScalar(1);
+    dummy.updateMatrix();
+    balloonEnvInst.setMatrixAt(idx, dummy.matrix);
+
+    dummy.position.set(b.x, curY - 17.5, b.z);
+    dummy.updateMatrix();
+    balloonBasketInst.setMatrixAt(idx, dummy.matrix);
+  });
+  balloonEnvInst.instanceMatrix.needsUpdate = true;
+  balloonBasketInst.instanceMatrix.needsUpdate = true;
+
+  // Instanced Flocks of Gliding Seagulls
+  seagullData.forEach((sg, idx) => {
+    const ang = elapsed * sg.speed + sg.phase;
+    const gx = sg.center.x + Math.cos(ang) * sg.radius;
+    const gz = sg.center.z + Math.sin(ang) * sg.radius;
+    const gy = sg.center.y + sg.yOff + Math.sin(elapsed * 1.5 + sg.phase) * 2.5;
+    dummy.position.set(gx, gy, gz);
+    dummy.rotation.set(0, -ang, 0.18);
+    dummy.scale.setScalar(1);
+    dummy.updateMatrix();
+    seagullInst.setMatrixAt(idx, dummy.matrix);
+  });
+  seagullInst.instanceMatrix.needsUpdate = true;
+
+  // Storm Theme Periodic Lightning Flashes
+  if (currentThemeKey === 'storm') {
+    gameState.lightningTimer -= dt;
+    if (gameState.lightningTimer <= 0) {
+      gameState.lightningTimer = 4.5 + Math.random() * 6.0;
+      sunLight.intensity = 9.0;
+      skyUniforms.uHorizonColor.value.setHex(0xe2e8f0);
+      sfx.playThunder();
+    } else if (sunLight.intensity > 1.15) {
+      sunLight.intensity = THREE.MathUtils.lerp(sunLight.intensity, 1.1, dt * 10);
+      skyUniforms.uHorizonColor.value.lerp(new THREE.Color(0x334155), dt * 10);
+    }
+  }
+
+  if (gameState.playing) {
+    updatePlayer(dt, elapsed);
+    updateProjectilesAndParticles(dt);
+    if(gameState.playing)updateEnemySquadron(dt, elapsed);
+    if(gameState.playing)checkCollisionsAndStunts(dt);
+    if(gameState.playing){if(gatePending){gateSeconds-=dt;if(gateSeconds<=0)positionRings();}else if(!gameState.freeFlight){gateSeconds-=dt;if(gateSeconds<=0){gameState.combo=1;damagePlayer(14,'GATE TIMEOUT');if(gameState.playing)positionRings();}}updateHUD();}
+  } else {
+    // Cinematic Attract Orbit over the Airport & Archipelago
+    const orbitAng = elapsed * 0.16;
+    camera.position.set(Math.cos(orbitAng) * 195, 72, Math.sin(orbitAng) * 195);
+    camera.lookAt(0, 18, -35);
+  }
+
+  skyDome.position.copy(camera.position);
+  updateHorizon(elapsed);
+  if (composer) {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
+}
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Initialize initial ring position & launch loop
+applyTheme('daylight');positionRings();
+animate();
+</script>
+</body>
+</html>
